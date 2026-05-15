@@ -1,9 +1,16 @@
-"""里程碑 0 主流程：config → 抓取 → 落盘 → LLM 抽取 → print。
+"""主流程：config → 抓取 → 落盘 → LLM 抽取 → print。
+
+两个并行维度：
+- 维度 1：artists（关注艺人，全国巡演不限城市）
+- 维度 2：local.keywords + local.city（上海本地发现）
 
 刻意不做：入库、去重、通知。这些是里程碑 1 的事。
 
-支持 `--fixture` 模式：跳过抓取，从 data/fixtures/{source}_{artist}.html 读
-预置 HTML 走抽取。用于在抓取源遇到反爬或暂时不可用时，独立验证 LLM 抽取链路。
+支持 `--fixture` 模式：跳过抓取，从 data/fixtures/{source}_{query}.html
+读预置 HTML，用于在抓取暂不可用时验证抽取链路。
+
+支持 `--init-profile` 模式：开 GUI Chrome 让用户手动浏览一次大麦，
+建立 .browser-profile/，后续 headless 跑就复用这个 profile。
 """
 
 import argparse
@@ -28,6 +35,50 @@ def load_config() -> dict:
         return yaml.safe_load(f)
 
 
+def _run_one(
+    source,
+    *,
+    query: str,
+    city: str | None,
+    description: str,
+    label: str,
+    use_fixture: bool,
+) -> list[dict]:
+    """跑一次"抓取 + 抽取"，返回结构化事件列表。"""
+    mode = "fixture" if use_fixture else "live"
+    print(f"\n=== {source.name} | {label} | {mode} ===")
+    fetched_at = datetime.now()
+
+    if use_fixture:
+        fixture = FIXTURE_DIR / f"{source.name}_{query}.html"
+        if not fixture.exists():
+            print(f"[fixture] 找不到 {fixture.relative_to(ROOT)}，跳过")
+            return []
+        raw = fixture.read_text(encoding="utf-8")
+        url = f"fixture://{fixture.name}"
+        print(f"[fixture] 使用 {fixture.relative_to(ROOT)} ({len(raw):,} 字节)")
+    else:
+        try:
+            url, raw = source.fetch_raw(query, city=city)
+        except Exception as e:
+            print(f"[fetch] 失败: {e}")
+            return []
+        raw_path = source.raw_path(RAW_DIR, query, fetched_at)
+        raw_path.write_text(raw, encoding="utf-8")
+        print(f"[fetch] OK, HTML {len(raw):,} 字节 → {raw_path.relative_to(ROOT)}")
+
+    events = extract_events(
+        raw,
+        description=description,
+        source_url=url,
+        source_name=source.name,
+    )
+    print(f"[extract] 抽到 {len(events)} 条结构化记录")
+    for e in events:
+        print(json.dumps(e, ensure_ascii=False, indent=2))
+    return events
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="演出活动监控")
     parser.add_argument(
@@ -46,55 +97,52 @@ def main() -> None:
     config = load_config()
 
     artists: list[str] = config.get("artists") or []
-    city: str | None = config.get("city")
+    local: dict = config.get("local") or {}
+    local_city: str | None = local.get("city")
+    local_keywords: list[str] = local.get("keywords") or []
     sources_cfg: dict = config.get("sources") or {}
-
-    if not artists:
-        print("config.yaml 里 artists 为空，请至少配置一个艺人。")
-        return
 
     if not sources_cfg.get("damai", {}).get("enabled", False):
         print("damai 源未启用 (config.yaml: sources.damai.enabled = true).")
         return
 
     RAW_DIR.mkdir(parents=True, exist_ok=True)
-    source = DamaiSource(city=city)
+    source = DamaiSource()
 
     if args.init_profile:
-        first_artist = artists[0]
-        print(f"[init-profile] 用艺人 '{first_artist}' 打开大麦搜索页...")
-        source.init_profile(first_artist)
+        seed = artists[0] if artists else (local_keywords[0] if local_keywords else "周杰伦")
+        print(f"[init-profile] 用 '{seed}' 打开大麦搜索页...")
+        source.init_profile(seed)
+        return
+
+    if not artists and not local_keywords:
+        print("config.yaml 里 artists 和 local.keywords 都为空，无事可做。")
         return
 
     all_events: list[dict] = []
 
-    mode_label = "fixture" if args.fixture else "live"
+    # 维度 1: 关注艺人，全国巡演都看
     for artist in artists:
-        print(f"\n=== {source.name} | 艺人: {artist} | 城市: {city} | 模式: {mode_label} ===")
-        fetched_at = datetime.now()
+        events = _run_one(
+            source,
+            query=artist,
+            city=None,
+            description=f"与艺人「{artist}」相关的演唱会 / 演出场次（任何城市）",
+            label=f"艺人={artist} (全国)",
+            use_fixture=args.fixture,
+        )
+        all_events.extend(events)
 
-        if args.fixture:
-            fixture_file = FIXTURE_DIR / f"{source.name}_{artist}.html"
-            if not fixture_file.exists():
-                print(f"[fixture] 找不到 {fixture_file.relative_to(ROOT)}，跳过 {artist}")
-                continue
-            raw = fixture_file.read_text(encoding="utf-8")
-            url = f"fixture://{fixture_file.name}"
-            print(f"[fixture] 使用 {fixture_file.relative_to(ROOT)} ({len(raw):,} 字节)")
-        else:
-            try:
-                url, raw = source.fetch_raw(artist)
-            except Exception as e:
-                print(f"[fetch] 失败: {e}")
-                continue
-            raw_path = source.raw_path(RAW_DIR, artist, fetched_at)
-            raw_path.write_text(raw, encoding="utf-8")
-            print(f"[fetch] OK, HTML {len(raw):,} 字节 → {raw_path.relative_to(ROOT)}")
-
-        events = extract_events(raw, artist=artist, source_url=url)
-        print(f"[extract] 抽到 {len(events)} 条结构化记录")
-        for e in events:
-            print(json.dumps(e, ensure_ascii=False, indent=2))
+    # 维度 2: 上海本地发现
+    for keyword in local_keywords:
+        events = _run_one(
+            source,
+            query=keyword,
+            city=local_city,
+            description=f"在「{local_city}」举办的{keyword}相关的演出 / 展览 / 活动",
+            label=f"本地={keyword}@{local_city}",
+            use_fixture=args.fixture,
+        )
         all_events.extend(events)
 
     print()

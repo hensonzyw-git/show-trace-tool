@@ -3,6 +3,9 @@
 DeepSeek 兼容 OpenAI SDK，只是 base_url 不同。模型用 deepseek-chat（V3），
 抽取任务用它足够；如果以后想试 reasoner（R1），改 model 字段即可。
 
+extract_events 接受 description 参数描述"找什么"，由 caller 决定 prompt
+context（艺人 vs 本地关键词），让 extractor 与"维度"解耦。
+
 无 API key 时不抛错，print 提示并返回空列表，便于在等 key 期间链路依然能跑通。
 """
 
@@ -13,13 +16,13 @@ from typing import Any
 from bs4 import BeautifulSoup
 
 EXTRACT_PROMPT = """你是信息抽取助手。下面是从演出票务网站抓到的原始内容（已转纯文本），\
-请从中识别与艺人「{artist}」相关的演唱会 / 演出场次，按字段输出 JSON。\
-没有任何场次时返回 {{"events": []}}。
+请从中识别 {description}，按字段输出 JSON。\
+没有匹配项时返回 {{"events": []}}。
 
-字段（找不到的字段填 null，不要瞎编）:
+字段（找不到的字段填 null，不要瞎编；artist 对非艺人活动可以为 null）:
 - type: "concert" | "exhibition" | "activity"
 - title: 标题
-- artist: 艺人
+- artist: 艺人（展览/活动可空）
 - city: 城市
 - venue: 场馆
 - event_date: 举办日期 (YYYY-MM-DD，区间写成 "YYYY-MM-DD ~ YYYY-MM-DD")
@@ -50,7 +53,12 @@ def html_to_text(html: str, limit: int = 60_000) -> str:
     return text[:limit]
 
 
-def extract_events(html: str, artist: str, source_url: str) -> list[dict[str, Any]]:
+def extract_events(
+    html: str,
+    description: str,
+    source_url: str,
+    source_name: str = "damai",
+) -> list[dict[str, Any]]:
     api_key = os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
         print(
@@ -73,11 +81,11 @@ def extract_events(html: str, artist: str, source_url: str) -> list[dict[str, An
         messages=[
             {
                 "role": "user",
-                "content": EXTRACT_PROMPT.format(artist=artist, content=text),
+                "content": EXTRACT_PROMPT.format(description=description, content=text),
             }
         ],
         response_format={"type": "json_object"},
-        max_tokens=2048,
+        max_tokens=8192,
         temperature=0.0,
     )
 
@@ -94,7 +102,7 @@ def extract_events(html: str, artist: str, source_url: str) -> list[dict[str, An
         return []
 
     for e in events:
-        e.setdefault("source", "damai")
+        e.setdefault("source", source_name)
         if not e.get("source_url"):
             e["source_url"] = source_url
     return events

@@ -1,5 +1,10 @@
 """大麦网搜索抓取器（patchright + 持久化 Chrome profile）。
 
+city 不再作为 source 属性，而是 fetch_raw 的可选参数 —— 同一个 source
+实例可同时服务两个维度：
+- 艺人维度：fetch_raw(artist)           不带 cty，全国结果
+- 本地维度：fetch_raw(keyword, city=…)  带 cty 过滤
+
 历史：
 - 里程碑 0：Playwright headless 触发阿里 RGV587 滑块反爬
 - 里程碑 0.5 / A：patchright 替换 Playwright 仍被反爬识别（webdriver
@@ -8,9 +13,6 @@
   channel="chrome"。用项目内独立 user_data_dir（.browser-profile/），
   通过 channel="chrome" 调用系统真实 Chrome 二进制——指纹更接近正常用户。
   首次需要 GUI 模式让用户手动浏览一下，建立真实的 cookie/history/指纹痕迹。
-
-每天一次的低频访问对这套 profile 友好；如果哪天 profile 又被反爬识别，
-重新跑一次 `python main.py --init-profile` 即可。
 """
 
 from pathlib import Path
@@ -28,14 +30,13 @@ class DamaiSource(Source):
 
     SEARCH_URL = "https://search.damai.cn/search.htm"
 
-    def __init__(self, city: str | None = None, headless: bool = True):
-        self.city = city
+    def __init__(self, headless: bool = True):
         self.headless = headless
 
-    def _build_url(self, query: str) -> str:
+    def _build_url(self, query: str, city: str | None = None) -> str:
         params: dict[str, str] = {"keyword": query}
-        if self.city:
-            params["cty"] = self.city
+        if city:
+            params["cty"] = city
         return f"{self.SEARCH_URL}?{urlencode(params)}"
 
     def _launch(self, p, headless: bool):
@@ -48,8 +49,8 @@ class DamaiSource(Source):
             locale="zh-CN",
         )
 
-    def fetch_raw(self, query: str) -> tuple[str, str]:
-        url = self._build_url(query)
+    def fetch_raw(self, query: str, city: str | None = None) -> tuple[str, str]:
+        url = self._build_url(query, city)
         with sync_playwright() as p:
             ctx = self._launch(p, headless=self.headless)
             try:
@@ -63,9 +64,10 @@ class DamaiSource(Source):
             finally:
                 ctx.close()
 
-    def init_profile(self, query: str) -> None:
+    def init_profile(self, query: str = "周杰伦") -> None:
         """开 GUI 模式让用户手动浏览一次，给 profile 建立真实使用痕迹。
 
+        query 仅用于打开一个搜索页方便互动，不影响 profile 内容。
         如果遇到滑块验证码，人工滑过最稳定。完成后回终端按 Enter。
         """
         url = self._build_url(query)

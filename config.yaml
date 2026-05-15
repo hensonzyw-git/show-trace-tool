@@ -1,11 +1,16 @@
-city: 上海
-
+# 维度 1: 关注的艺人 → 全国巡演都监控（不限城市）
 artists:
   - 周杰伦
 
-keywords:
-  - 上海 展览
+# 维度 2: 上海本地发现 → 不限艺人，按关键词抓本地演出 / 活动
+local:
+  city: 上海
+  keywords:
+    - 演唱会
+    - 展览
+    - 音乐节
 
+# 启用的抓取源
 sources:
   damai:
     enabled: true
