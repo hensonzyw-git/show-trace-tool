@@ -13,11 +13,17 @@
 
 import argparse
 import json
+import random
+import time
 from datetime import datetime
 from pathlib import Path
 
 import yaml
 from dotenv import load_dotenv
+
+# 两次抓取之间的随机间隔范围（秒）—— 防止短时间内多次访问触发大麦风控。
+# 即便 fetch 本身没问题，太密集的访问也会磨损 profile 信任度。
+FETCH_INTERVAL_RANGE = (6.0, 12.0)
 
 from db import get_unnotified_events, init_db, mark_notified, upsert_event
 from extractor import extract_events
@@ -124,26 +130,36 @@ def main() -> None:
     init_db()
     all_events: list[dict] = []
 
-    # 维度 1: 关注艺人，全国巡演都看
+    # 拼出所有查询任务，统一调度（方便在它们之间加随机间隔）
+    tasks: list[dict] = []
     for artist in artists:
-        events = _run_one(
-            source,
-            query=artist,
-            city=None,
-            description=f"与艺人「{artist}」相关的演唱会 / 演出场次（任何城市）",
-            label=f"艺人={artist} (全国)",
-            use_fixture=args.fixture,
-        )
-        all_events.extend(events)
-
-    # 维度 2: 上海本地发现
+        tasks.append({
+            "query": artist,
+            "city": None,
+            "description": f"与艺人「{artist}」相关的演唱会 / 演出场次（任何城市）",
+            "label": f"艺人={artist} (全国)",
+        })
     for keyword in local_keywords:
+        tasks.append({
+            "query": keyword,
+            "city": local_city,
+            "description": f"在「{local_city}」举办的{keyword}相关的演出 / 展览 / 活动",
+            "label": f"本地={keyword}@{local_city}",
+        })
+
+    for i, t in enumerate(tasks):
+        # 抓取之间随机间隔（fixture 模式无外部请求，无需间隔）
+        if i > 0 and not args.fixture:
+            interval = random.uniform(*FETCH_INTERVAL_RANGE)
+            print(f"\n[interval] 间隔 {interval:.1f}s 防止触发风控...")
+            time.sleep(interval)
+
         events = _run_one(
             source,
-            query=keyword,
-            city=local_city,
-            description=f"在「{local_city}」举办的{keyword}相关的演出 / 展览 / 活动",
-            label=f"本地={keyword}@{local_city}",
+            query=t["query"],
+            city=t["city"],
+            description=t["description"],
+            label=t["label"],
             use_fixture=args.fixture,
         )
         all_events.extend(events)

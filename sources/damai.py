@@ -78,6 +78,10 @@ class DamaiSource(Source):
     def init_profile(self, query: str = "周杰伦") -> None:
         """开 GUI 模式让用户手动浏览一次，给 profile 建立真实使用痕迹。
 
+        强烈推荐在这一步登录大麦账号 —— 已登录用户被阿里风控触发滑块的
+        概率远低于未登录。登录态会持久化到 .browser-profile/，后续 headless
+        跑就直接是登录态。
+
         query 仅用于打开一个搜索页方便互动，不影响 profile 内容。
         如果遇到滑块验证码，人工滑过最稳定。完成后回终端按 Enter。
         """
@@ -88,9 +92,11 @@ class DamaiSource(Source):
                 page = ctx.pages[0] if ctx.pages else ctx.new_page()
                 page.goto(url, wait_until="domcontentloaded", timeout=30_000)
                 print("\n[init-profile] Chrome 已打开大麦搜索页。请：")
-                print("  1. 如果出现滑块验证码，手动滑过（人工最稳）")
-                print("  2. 自然浏览 5~15 秒（点开一两个结果也好）")
-                print("  3. 浏览完成后，回到这里按 Enter")
+                print("  1. ★ 强烈推荐：点右上角【登录】，登录你的大麦账号 ★")
+                print("     —— 登录态会进 profile，大幅降低反爬触发概率")
+                print("  2. 如果出现滑块验证码，手动滑过（人工最稳）")
+                print("  3. 自然浏览 5~15 秒（点开一两个结果也好）")
+                print("  4. 浏览完成后，回到这里按 Enter")
                 input("\n  >> 完成后按 Enter 关闭浏览器并保存 profile: ")
             finally:
                 ctx.close()
