@@ -1,10 +1,8 @@
-"""主流程：config → 抓取 → 落盘 → LLM 抽取 → print。
+"""主流程：config → 抓取 → 落盘 → LLM 抽取 → 入库去重 → Markdown 通知。
 
 两个并行维度：
 - 维度 1：artists（关注艺人，全国巡演不限城市）
 - 维度 2：local.keywords + local.city（上海本地发现）
-
-刻意不做：入库、去重、通知。这些是里程碑 1 的事。
 
 支持 `--fixture` 模式：跳过抓取，从 data/fixtures/{source}_{query}.html
 读预置 HTML，用于在抓取暂不可用时验证抽取链路。
@@ -21,7 +19,9 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
+from db import get_unnotified_events, init_db, mark_notified, upsert_event
 from extractor import extract_events
+from notifiers.markdown import MarkdownNotifier
 from sources.damai import DamaiSource
 
 ROOT = Path(__file__).parent
@@ -56,6 +56,7 @@ def _run_one(
             return []
         raw = fixture.read_text(encoding="utf-8")
         url = f"fixture://{fixture.name}"
+        raw_ref = str(fixture.relative_to(ROOT))
         print(f"[fixture] 使用 {fixture.relative_to(ROOT)} ({len(raw):,} 字节)")
     else:
         try:
@@ -65,7 +66,8 @@ def _run_one(
             return []
         raw_path = source.raw_path(RAW_DIR, query, fetched_at)
         raw_path.write_text(raw, encoding="utf-8")
-        print(f"[fetch] OK, HTML {len(raw):,} 字节 → {raw_path.relative_to(ROOT)}")
+        raw_ref = str(raw_path.relative_to(ROOT))
+        print(f"[fetch] OK, HTML {len(raw):,} 字节 → {raw_ref}")
 
     events = extract_events(
         raw,
@@ -73,9 +75,9 @@ def _run_one(
         source_url=url,
         source_name=source.name,
     )
-    print(f"[extract] 抽到 {len(events)} 条结构化记录")
     for e in events:
-        print(json.dumps(e, ensure_ascii=False, indent=2))
+        e["raw_ref"] = raw_ref
+    print(f"[extract] 抽到 {len(events)} 条结构化记录")
     return events
 
 
@@ -119,6 +121,7 @@ def main() -> None:
         print("config.yaml 里 artists 和 local.keywords 都为空，无事可做。")
         return
 
+    init_db()
     all_events: list[dict] = []
 
     # 维度 1: 关注艺人，全国巡演都看
@@ -145,11 +148,24 @@ def main() -> None:
         )
         all_events.extend(events)
 
-    print()
+    # 入库 + 去重
+    new_count = 0
+    for e in all_events:
+        _, is_new = upsert_event(e)
+        if is_new:
+            new_count += 1
+    print(f"\n=== 入库: {len(all_events)} 条抽取结果中 {new_count} 条是新事件 ===")
+
+    # 通知（只处理 notified_at IS NULL 的）
+    unnotified = get_unnotified_events()
+    notifier = MarkdownNotifier()
+    notifier.notify(unnotified)
+    mark_notified([e["id"] for e in unnotified])
+
     if all_events:
-        print(f"=== 共 {len(all_events)} 条事件 ===")
+        print(f"\n=== 本次共处理 {len(all_events)} 条事件，通知 {len(unnotified)} 条 ===")
     else:
-        print("=== 本次未抽到任何结构化事件 ===")
+        print("\n=== 本次未抽到任何结构化事件 ===")
 
 
 if __name__ == "__main__":

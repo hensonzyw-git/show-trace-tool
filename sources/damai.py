@@ -56,10 +56,21 @@ class DamaiSource(Source):
             try:
                 page = ctx.pages[0] if ctx.pages else ctx.new_page()
                 page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+                # 显式等搜索结果列表出现 —— networkidle 在大麦 SPA 上偶尔会
+                # 过早通过（polling/keep-alive 干扰 idle 判定）。selector 没
+                # 等到不致命，可能本来就 0 条结果。
                 try:
-                    page.wait_for_load_state("networkidle", timeout=10_000)
+                    page.wait_for_selector(
+                        ".search__itemlist .item__main, .search-noresult",
+                        timeout=15_000,
+                    )
                 except Exception:
                     pass
+                try:
+                    page.wait_for_load_state("networkidle", timeout=8_000)
+                except Exception:
+                    pass
+                page.wait_for_timeout(1500)  # 给最后的 reflow 一点 buffer
                 return page.url, page.content()
             finally:
                 ctx.close()
