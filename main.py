@@ -29,11 +29,16 @@ def load_config() -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="演出活动监控 - 里程碑 0")
+    parser = argparse.ArgumentParser(description="演出活动监控")
     parser.add_argument(
         "--fixture",
         action="store_true",
         help="跳过真实抓取，从 data/fixtures/ 读预置 HTML（用于验证抽取链路）",
+    )
+    parser.add_argument(
+        "--init-profile",
+        action="store_true",
+        help="开 GUI Chrome 让你手动浏览一次大麦，养 .browser-profile/（首次必跑）",
     )
     args = parser.parse_args()
 
@@ -54,6 +59,13 @@ def main() -> None:
 
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     source = DamaiSource(city=city)
+
+    if args.init_profile:
+        first_artist = artists[0]
+        print(f"[init-profile] 用艺人 '{first_artist}' 打开大麦搜索页...")
+        source.init_profile(first_artist)
+        return
+
     all_events: list[dict] = []
 
     mode_label = "fixture" if args.fixture else "live"

@@ -38,8 +38,12 @@ EXTRACT_PROMPT = """你是信息抽取助手。下面是从演出票务网站抓
 
 
 def html_to_text(html: str, limit: int = 60_000) -> str:
-    """剥掉 script/style/comment，转纯文本；超长则粗暴截断防止上下文爆。"""
-    soup = BeautifulSoup(html, "html.parser")
+    """剥掉 script/style/comment，转纯文本；超长则粗暴截断防止上下文爆。
+
+    用 lxml 而不是内置 html.parser —— 大麦实测下 html.parser 容错弱，
+    178KB HTML 只能 get_text 出 930 字（在某个标签上截了），lxml 没问题。
+    """
+    soup = BeautifulSoup(html, "lxml")
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
     text = soup.get_text("\n", strip=True)

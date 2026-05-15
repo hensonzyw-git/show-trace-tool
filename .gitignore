@@ -10,6 +10,9 @@ data/events.db
 # Claude Code session data
 .claude/
 
+# 持久化浏览器 profile（含 cookie / 缓存，本地养出来，不进版本控制）
+.browser-profile/
+
 # Python
 venv/
 __pycache__/
