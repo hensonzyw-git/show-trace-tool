@@ -1,0 +1,23 @@
+# Secrets
+.env
+
+# Local data — raw HTML, SQLite, generated digests
+# (fixtures 保留在版本控制里，是项目示例数据)
+data/raw/
+data/digests/
+data/events.db
+
+# Claude Code session data
+.claude/
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# OS / Editor
+.DS_Store
+.vscode/
+.idea/

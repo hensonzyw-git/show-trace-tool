@@ -1,0 +1,11 @@
+city: 上海
+
+artists:
+  - 周杰伦
+
+keywords:
+  - 上海 展览
+
+sources:
+  damai:
+    enabled: true
