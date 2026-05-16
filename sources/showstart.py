@@ -47,12 +47,19 @@ class ShowstartSource(Source):
         """按 city 列出该城市的所有演出。query 参数当前忽略（秀动无 keyword 搜索）。
 
         city=None 或 city not in CITY_CODES → 返回 (url, "")，让 main 跳过抽取。
+        同 city 的多次 task 复用同一份 raw（cache by city）。
         """
         code = self.CITY_CODES.get(city) if city else None
         if code is None:
             return (self.LIST_URL, "")
 
-        params: dict[str, int] = {"pageNo": 1, "pageSize": 50, "cityCode": code}
+        return self._cached_fetch(
+            key=("city", city),
+            fetcher=lambda: self._do_fetch(code),
+        )
+
+    def _do_fetch(self, city_code: int) -> tuple[str, str]:
+        params: dict[str, int] = {"pageNo": 1, "pageSize": 50, "cityCode": city_code}
         url = f"{self.LIST_URL}?{urlencode(params)}"
         resp = requests.get(url, headers=self.HEADERS, timeout=20)
         resp.raise_for_status()

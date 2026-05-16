@@ -56,16 +56,22 @@ class MotianlunSource(Source):
 
         query 当前忽略（摩天轮 floor 是按 city 给推荐，无 keyword 搜索）。
         city 未配置时返回空 raw 让 main 跳过。
+        同 city 的多次 task 复用同一份 raw（cache by city）。
         """
         cid = self.CITY_IDS.get(city) if city else None
         if cid is None:
             return (self.FLOOR_URL, "")
 
-        params = {"cityId": cid, "src": "web"}
+        return self._cached_fetch(
+            key=("city", city),
+            fetcher=lambda: self._do_fetch(cid),
+        )
+
+    def _do_fetch(self, city_id: int) -> tuple[str, str]:
+        params = {"cityId": city_id, "src": "web"}
         url = f"{self.FLOOR_URL}?{urlencode(params)}"
         resp = requests.get(url, headers=self.HEADERS, timeout=20)
         resp.raise_for_status()
-
         data = resp.json()
         text = self._format_floor(data.get("data") or [])
         return resp.url, text

@@ -25,6 +25,11 @@ class Source(ABC):
     # 两次 fetch 之间的随机间隔范围（秒）。子类按反爬强度 override。
     fetch_interval_range: tuple[float, float] = (6.0, 12.0)
 
+    def __init__(self) -> None:
+        # 同进程内的 fetch 缓存。key 由子类决定（见 _cached_fetch 的用法）。
+        # 用于"同 city 重复 fetch"这种典型浪费场景。
+        self._fetch_cache: dict[object, tuple[str, str]] = {}
+
     @abstractmethod
     def fetch_raw(self, query: str, city: str | None = None) -> tuple[str, str]:
         """返回 (实际请求 URL, 原始内容文本)。
@@ -32,6 +37,25 @@ class Source(ABC):
         城市未支持或当前查询不适用时，返回 (url, "")，main 会跳过 LLM 抽取。
         """
         ...
+
+    def _cached_fetch(
+        self,
+        key: object,
+        fetcher,
+    ) -> tuple[str, str]:
+        """同 key 在同进程内复用一次 fetch 结果。
+
+        典型用法：秀动 / 摩天轮"按 city 浏览"模式下，多个不同 keyword task
+        其实拉的是同一份 city 数据，没必要重复 fetch + 重复跑网络。
+        cache key 由子类自己定，通常是 ("city", city) 之类的元组。
+        """
+        if key in self._fetch_cache:
+            url, raw = self._fetch_cache[key]
+            print(f"  [cache] {self.name} 复用 key={key!r} ({len(raw):,} 字节)")
+            return url, raw
+        result = fetcher()
+        self._fetch_cache[key] = result
+        return result
 
     def discovered_via(self, query: str, city: str | None) -> str:
         """用户视角的"在哪发现"字符串，digest 渲染用。子类按各自交互模型 override。

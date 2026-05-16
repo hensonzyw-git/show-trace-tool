@@ -35,7 +35,11 @@ class DamaiSource(Source):
     SEARCH_URL = "https://search.damai.cn/search.htm"
 
     def __init__(self, headless: bool = True):
+        super().__init__()
         self.headless = headless
+
+    # 不 override _cached_fetch 的 key 策略 —— 大麦每个 query 都是不同搜索，
+    # 不需要 cache（即使按 (query, city) cache 也不会命中）。
 
     def discovered_via(self, query: str, city: str | None) -> str:
         city_part = f"（{city}）" if city else "（全国）"
