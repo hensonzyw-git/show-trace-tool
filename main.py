@@ -4,6 +4,10 @@
 - 维度 1：artists（关注艺人，全国巡演不限城市）
 - 维度 2：local.keywords + local.city（上海本地发现）
 
+刻意不做"详情页跟进"。LLM 只抽搜索页能见到的字段，`on_sale_time` 经常
+是 null（搜索页本来就没有），这正常。digest 里的 `purchase_url` 是大麦
+详情页直链，对某条事件感兴趣时 cmd+click 去原平台看完整信息即可。
+
 支持 `--fixture` 模式：跳过抓取，从 data/fixtures/{source}_{query}.html
 读预置 HTML，用于在抓取暂不可用时验证抽取链路。
 
@@ -21,10 +25,6 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
-# 两次抓取之间的随机间隔范围（秒）—— 防止短时间内多次访问触发大麦风控。
-# 即便 fetch 本身没问题，太密集的访问也会磨损 profile 信任度。
-FETCH_INTERVAL_RANGE = (6.0, 12.0)
-
 from db import get_unnotified_events, init_db, mark_notified, upsert_event
 from extractor import extract_events
 from notifiers.markdown import MarkdownNotifier
@@ -34,6 +34,10 @@ ROOT = Path(__file__).parent
 CONFIG_PATH = ROOT / "config.yaml"
 RAW_DIR = ROOT / "data" / "raw"
 FIXTURE_DIR = ROOT / "data" / "fixtures"
+
+# 搜索页（patchright + profile）两次抓取之间的随机间隔范围（秒）。
+# 短时间多次会磨损 profile 信任度，触发滑块反爬。
+FETCH_INTERVAL_RANGE = (6.0, 12.0)
 
 
 def load_config() -> dict:

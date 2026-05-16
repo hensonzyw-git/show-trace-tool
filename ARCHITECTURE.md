@@ -37,3 +37,14 @@
 ## 现在不纠结的（改起来便宜的部分）
 
 通知渠道、调度方式、某个源用 requests 还是 Playwright、SQLite 换不换数据库 —— 都是「换一个适配器」或「加一个文件」的事，跟架构无关。
+
+## 决策不做：详情页跟进
+
+LLM 只抽搜索页能见到的字段，`on_sale_time` 经常是 `null` 也接受。digest 里的 `purchase_url` 是大麦详情页直链，对某条事件感兴趣时 cmd+click 即可去原平台看完整信息（开票时间、座位图、实时余票等）。
+
+实验过 main.py 自动抓详情页 + LLM 二次抽取，但弃用，原因：
+- `detail.damai.cn` 用 patchright + profile cookies 会被服务端 500，要走 `requests` 无 cookie 路径
+- LLM 重抽时 title/venue 微差导致 `events.id` 漂移（同事件入两条）
+- 用户对感兴趣事件会自己去原平台决策购买，自动补全的 ROI 低
+
+定位上：**digest 是"发现层"，原平台是"决策层"**，不要让 LLM 模糊这两层。

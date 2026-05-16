@@ -13,6 +13,9 @@ city 不再作为 source 属性，而是 fetch_raw 的可选参数 —— 同一
   channel="chrome"。用项目内独立 user_data_dir（.browser-profile/），
   通过 channel="chrome" 调用系统真实 Chrome 二进制——指纹更接近正常用户。
   首次需要 GUI 模式让用户手动浏览一下，建立真实的 cookie/history/指纹痕迹。
+
+刻意只暴露 fetch_raw（搜索页）—— 详情页跟进作为功能被否决（见
+ARCHITECTURE.md 和 memory）。
 """
 
 from pathlib import Path

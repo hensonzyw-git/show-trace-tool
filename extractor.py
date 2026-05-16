@@ -6,6 +6,9 @@ DeepSeek 兼容 OpenAI SDK，只是 base_url 不同。模型用 deepseek-chat（
 extract_events 接受 description 参数描述"找什么"，由 caller 决定 prompt
 context（艺人 vs 本地关键词），让 extractor 与"维度"解耦。
 
+刻意不做详情页二次抽取 —— digest 里的 purchase_url 是大麦详情页直链，
+用户对感兴趣事件会自己点过去看，不需要 LLM 在中间再加一层抽取。
+
 无 API key 时不抛错，print 提示并返回空列表，便于在等 key 期间链路依然能跑通。
 """
 
@@ -26,9 +29,9 @@ EXTRACT_PROMPT = """你是信息抽取助手。下面是从演出票务网站抓
 - city: 城市
 - venue: 场馆
 - event_date: 举办日期 (YYYY-MM-DD，区间写成 "YYYY-MM-DD ~ YYYY-MM-DD")
-- on_sale_time: 开票时间
+- on_sale_time: 开票时间（搜索页通常没有，找不到就 null）
 - price_info: 价格信息（字符串即可）
-- purchase_url: 购票链接
+- purchase_url: 购票 / 详情页链接（在内容里以 `[link: https://detail.damai.cn/...]` 标记出现，给每个事件配最相关的那条）
 - source_url: 来源页面 URL
 
 输出格式必须是 {{"events": [ {{...}}, {{...}} ]}}，事件放在 events 数组里。
@@ -45,10 +48,18 @@ def html_to_text(html: str, limit: int = 60_000) -> str:
 
     用 lxml 而不是内置 html.parser —— 大麦实测下 html.parser 容错弱，
     178KB HTML 只能 get_text 出 930 字（在某个标签上截了），lxml 没问题。
+
+    给 detail.damai.cn 的链接附加 `[link: URL]` 标记 —— BS4 get_text
+    默认丢弃 href 属性，但 LLM 需要 detail URL 才能填进 purchase_url。
     """
     soup = BeautifulSoup(html, "lxml")
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        if "detail.damai.cn" in href:
+            full = ("https:" + href) if href.startswith("//") else href
+            a.append(f" [link: {full}]")
     text = soup.get_text("\n", strip=True)
     return text[:limit]
 
@@ -105,4 +116,8 @@ def extract_events(
         e.setdefault("source", source_name)
         if not e.get("source_url"):
             e["source_url"] = source_url
+        # 把协议相对 URL 补全 https，方便 digest 里直接渲染成可点击链接
+        url = e.get("purchase_url")
+        if url and url.startswith("//"):
+            e["purchase_url"] = "https:" + url
     return events

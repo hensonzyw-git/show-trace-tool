@@ -71,6 +71,8 @@ class MarkdownNotifier(Notifier):
             out.append(f"- 开票: {e['on_sale_time']}")
         if e.get("price_info"):
             out.append(f"- 票价: {e['price_info']}")
+        if e.get("purchase_url"):
+            out.append(f"- [→ 详情 / 购票]({e['purchase_url']})")
         if e.get("source_url"):
             out.append(f"- 来源: [{e.get('source') or '?'}]({e['source_url']})")
         out.append("")
