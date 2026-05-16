@@ -33,6 +33,7 @@ from db import get_unnotified_events, init_db, mark_notified, upsert_event
 from extractor import extract_events
 from notifiers.markdown import MarkdownNotifier
 from sources.damai import DamaiSource
+from sources.motianlun import MotianlunSource
 from sources.showstart import ShowstartSource
 
 ROOT = Path(__file__).parent
@@ -44,6 +45,7 @@ FIXTURE_DIR = ROOT / "data" / "fixtures"
 SOURCE_REGISTRY: dict[str, type] = {
     "damai": DamaiSource,
     "showstart": ShowstartSource,
+    "motianlun": MotianlunSource,
 }
 
 
