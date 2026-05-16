@@ -38,6 +38,28 @@
 
 通知渠道、调度方式、某个源用 requests 还是 Playwright、SQLite 换不换数据库 —— 都是「换一个适配器」或「加一个文件」的事，跟架构无关。
 
+## 多源：每个源独立 Source 子类 + SOURCE_REGISTRY 注册
+
+`main.py::SOURCE_REGISTRY` 注册所有 source 类。加新源 3 步：
+1. `sources/<name>.py` 实现 Source 子类（`fetch_raw` + 通常 `discovered_via`）
+2. SOURCE_REGISTRY 加一行 `"<name>": <Class>`
+3. `config.yaml` `sources.<name>.enabled: true`
+
+每个 source 自带两个 class attr / method 反映"此源代价模型"：
+- `fetch_interval_range`: 此源两次 fetch 之间的随机间隔范围（秒）。反爬强弱差异巨大：大麦 6-12s，秀动 1-3s
+- `discovered_via(query, city)`: 给 digest 渲染用的"用户视角在哪发现"字符串。每个源按自己的交互模型 override（搜索式 / 浏览式）
+
+main.py 嵌套 loop：每个 source 跑所有 task；interval 用各源自己的 range。`_run_one` 在 `raw == ""` 时优雅跳过，给"此源不支持当前查询"留口子。
+
+当前接入的源：
+
+| Source | 反爬 | 主打覆盖 | 抓取技术 |
+|---|---|---|---|
+| 大麦 (damai) | 重（阿里 RGV587 滑块） | 商业演出、演唱会、展览 | patchright + 持久化 Chrome profile |
+| 秀动 (showstart) | 无 | Livehouse、独立音乐、小型现场 | requests + cityCode 直接拉 SSR HTML |
+
+源之间互补：大麦不擅长 Livehouse，秀动不做商演。`events.id` 哈希让两源抓到同一事件自然去重。
+
 ## 决策不做：详情页跟进
 
 LLM 只抽搜索页能见到的字段，`on_sale_time` 经常是 `null` 也接受。digest 里的 `purchase_url` 是大麦详情页直链，对某条事件感兴趣时 cmd+click 即可去原平台看完整信息（开票时间、座位图、实时余票等）。
