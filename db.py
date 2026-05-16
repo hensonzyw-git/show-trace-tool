@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS events (
     source          TEXT,
     source_url      TEXT,
     raw_ref         TEXT,
+    discovered_via  TEXT,
     status          TEXT DEFAULT 'rumored',
     first_seen      TEXT NOT NULL,
     notified_at     TEXT
@@ -81,6 +82,10 @@ def _conn():
 def init_db() -> None:
     with _conn() as c:
         c.executescript(SCHEMA)
+        # 兼容旧 DB：补 discovered_via 列（如果是旧 schema 升级上来）
+        cols = {row[1] for row in c.execute("PRAGMA table_info(events)").fetchall()}
+        if "discovered_via" not in cols:
+            c.execute("ALTER TABLE events ADD COLUMN discovered_via TEXT")
 
 
 def upsert_event(event: dict[str, Any]) -> tuple[str, bool]:
@@ -117,9 +122,9 @@ def upsert_event(event: dict[str, Any]) -> tuple[str, bool]:
             """
             INSERT INTO events
             (id, type, title, artist, city, venue, event_date, on_sale_time,
-             price_info, purchase_url, source, source_url, raw_ref, status,
-             first_seen, notified_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+             price_info, purchase_url, source, source_url, raw_ref,
+             discovered_via, status, first_seen, notified_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
             """,
             (
                 event_id,
@@ -135,6 +140,7 @@ def upsert_event(event: dict[str, Any]) -> tuple[str, bool]:
                 event.get("source"),
                 event.get("source_url"),
                 event.get("raw_ref"),
+                event.get("discovered_via"),
                 event.get("status") or "rumored",
                 now,
             ),

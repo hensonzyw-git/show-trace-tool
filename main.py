@@ -52,6 +52,7 @@ def _run_one(
     city: str | None,
     description: str,
     label: str,
+    discovered_via: str,
     use_fixture: bool,
 ) -> list[dict]:
     """跑一次"抓取 + 抽取"，返回结构化事件列表。"""
@@ -87,6 +88,7 @@ def _run_one(
     )
     for e in events:
         e["raw_ref"] = raw_ref
+        e["discovered_via"] = discovered_via
     print(f"[extract] 抽到 {len(events)} 条结构化记录")
     return events
 
@@ -134,7 +136,8 @@ def main() -> None:
     init_db()
     all_events: list[dict] = []
 
-    # 拼出所有查询任务，统一调度（方便在它们之间加随机间隔）
+    # 拼出所有查询任务，统一调度（方便在它们之间加随机间隔）。
+    # discovered_via 是给用户看的字符串："你在哪个 App 搜什么关键词能复现到这条"。
     tasks: list[dict] = []
     for artist in artists:
         tasks.append({
@@ -142,6 +145,7 @@ def main() -> None:
             "city": None,
             "description": f"与艺人「{artist}」相关的演唱会 / 演出场次（任何城市）",
             "label": f"艺人={artist} (全国)",
+            "discovered_via": f"大麦 App · 搜「{artist}」（全国）",
         })
     for keyword in local_keywords:
         tasks.append({
@@ -149,6 +153,7 @@ def main() -> None:
             "city": local_city,
             "description": f"在「{local_city}」举办的{keyword}相关的演出 / 展览 / 活动",
             "label": f"本地={keyword}@{local_city}",
+            "discovered_via": f"大麦 App · 搜「{keyword}」（{local_city}）",
         })
 
     for i, t in enumerate(tasks):
@@ -164,6 +169,7 @@ def main() -> None:
             city=t["city"],
             description=t["description"],
             label=t["label"],
+            discovered_via=t["discovered_via"],
             use_fixture=args.fixture,
         )
         all_events.extend(events)
