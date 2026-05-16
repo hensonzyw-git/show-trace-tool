@@ -57,8 +57,9 @@ main.py 嵌套 loop：每个 source 跑所有 task；interval 用各源自己的
 |---|---|---|---|
 | 大麦 (damai) | 重（阿里 RGV587 滑块） | 商业演出、演唱会、展览 | patchright + 持久化 Chrome profile |
 | 秀动 (showstart) | 无 | Livehouse、独立音乐、小型现场 | requests + cityCode 直接拉 SSR HTML |
+| 摩天轮 (motianlun) | 无 | 话剧歌剧、舞蹈芭蕾、曲艺脱口秀、展览市集、儿童亲子、体育赛事 | requests 直接调 JSON API（floor 推荐 70+ 条/次）|
 
-源之间互补：大麦不擅长 Livehouse，秀动不做商演。`events.id` 哈希让两源抓到同一事件自然去重。
+源之间互补很强（大麦商演 / 秀动 Livehouse / 摩天轮 话剧+脱口秀+展览）。`events.id` 哈希让多源抓到同一事件自然去重，实测一次跑 107 抽到、78 入库（29 条跨源去重）。
 
 ## 决策不做：详情页跟进
 
