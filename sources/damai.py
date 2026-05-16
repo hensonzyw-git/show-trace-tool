@@ -30,11 +30,16 @@ PROFILE_DIR = Path(__file__).resolve().parent.parent / ".browser-profile"
 
 class DamaiSource(Source):
     name = "damai"
+    # fetch_interval_range 用基类默认 (6.0, 12.0) —— 大麦反爬重需要保守间隔
 
     SEARCH_URL = "https://search.damai.cn/search.htm"
 
     def __init__(self, headless: bool = True):
         self.headless = headless
+
+    def discovered_via(self, query: str, city: str | None) -> str:
+        city_part = f"（{city}）" if city else "（全国）"
+        return f"大麦 App · 搜「{query}」{city_part}"
 
     def _build_url(self, query: str, city: str | None = None) -> str:
         params: dict[str, str] = {"keyword": query}

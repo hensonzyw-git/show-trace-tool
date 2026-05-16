@@ -14,6 +14,7 @@ context（艺人 vs 本地关键词），让 extractor 与"维度"解耦。
 
 import json
 import os
+import re
 from typing import Any
 
 from bs4 import BeautifulSoup
@@ -43,22 +44,36 @@ EXTRACT_PROMPT = """你是信息抽取助手。下面是从演出票务网站抓
 """
 
 
+def _resolve_detail_link(href: str) -> str | None:
+    """如果 href 是某个已知 source 的演出详情链接，返回完整 URL；否则 None。
+
+    每加一个 source 在这里加一条规则。LLM 看到 `[link: ...]` 标记后会
+    把对应链接填进 purchase_url 字段。
+    """
+    # 大麦：//detail.damai.cn/item.htm?id=... 或 https://detail.damai.cn/...
+    if "detail.damai.cn" in href:
+        return ("https:" + href) if href.startswith("//") else href
+    # 秀动：/event/<数字>（排除 /event/list 这种非详情页 URL）
+    if re.match(r"^/event/\d", href):
+        return "https://www.showstart.com" + href
+    return None
+
+
 def html_to_text(html: str, limit: int = 60_000) -> str:
     """剥掉 script/style/comment，转纯文本；超长则粗暴截断防止上下文爆。
 
     用 lxml 而不是内置 html.parser —— 大麦实测下 html.parser 容错弱，
     178KB HTML 只能 get_text 出 930 字（在某个标签上截了），lxml 没问题。
 
-    给 detail.damai.cn 的链接附加 `[link: URL]` 标记 —— BS4 get_text
+    给已知 source 的演出详情链接附加 `[link: URL]` 标记 —— BS4 get_text
     默认丢弃 href 属性，但 LLM 需要 detail URL 才能填进 purchase_url。
     """
     soup = BeautifulSoup(html, "lxml")
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
     for a in soup.find_all("a", href=True):
-        href = a["href"]
-        if "detail.damai.cn" in href:
-            full = ("https:" + href) if href.startswith("//") else href
+        full = _resolve_detail_link(a["href"])
+        if full:
             a.append(f" [link: {full}]")
     text = soup.get_text("\n", strip=True)
     return text[:limit]

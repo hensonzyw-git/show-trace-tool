@@ -14,3 +14,5 @@ local:
 sources:
   damai:
     enabled: true
+  showstart:
+    enabled: true

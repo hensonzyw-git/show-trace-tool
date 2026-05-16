@@ -4,15 +4,19 @@
 - 维度 1：artists（关注艺人，全国巡演不限城市）
 - 维度 2：local.keywords + local.city（上海本地发现）
 
-刻意不做"详情页跟进"。LLM 只抽搜索页能见到的字段，`on_sale_time` 经常
-是 null（搜索页本来就没有），这正常。digest 里的 `purchase_url` 是大麦
-详情页直链，对某条事件感兴趣时 cmd+click 去原平台看完整信息即可。
+多个 source 注册在 SOURCE_REGISTRY，每个 source 独立跑所有 task。
+fetch 之间的间隔用各 source 自己的 fetch_interval_range（class attr）。
+
+刻意不做"详情页跟进"。LLM 只抽搜索 / 列表页能见到的字段，`on_sale_time`
+经常是 null（搜索页本来就没有），这正常。digest 里的 `purchase_url`
+是详情页直链 + `discovered_via` 告诉你去哪个 App 复现搜索。
 
 支持 `--fixture` 模式：跳过抓取，从 data/fixtures/{source}_{query}.html
 读预置 HTML，用于在抓取暂不可用时验证抽取链路。
 
 支持 `--init-profile` 模式：开 GUI Chrome 让用户手动浏览一次大麦，
 建立 .browser-profile/，后续 headless 跑就复用这个 profile。
+（仅大麦需要 profile；秀动是 SSR 不需要。）
 """
 
 import argparse
@@ -29,20 +33,31 @@ from db import get_unnotified_events, init_db, mark_notified, upsert_event
 from extractor import extract_events
 from notifiers.markdown import MarkdownNotifier
 from sources.damai import DamaiSource
+from sources.showstart import ShowstartSource
 
 ROOT = Path(__file__).parent
 CONFIG_PATH = ROOT / "config.yaml"
 RAW_DIR = ROOT / "data" / "raw"
 FIXTURE_DIR = ROOT / "data" / "fixtures"
 
-# 搜索页（patchright + profile）两次抓取之间的随机间隔范围（秒）。
-# 短时间多次会磨损 profile 信任度，触发滑块反爬。
-FETCH_INTERVAL_RANGE = (6.0, 12.0)
+# 加新 source 只需要：1) sources/<name>.py 实现 Source 子类 2) 这里注册一行
+SOURCE_REGISTRY: dict[str, type] = {
+    "damai": DamaiSource,
+    "showstart": ShowstartSource,
+}
 
 
 def load_config() -> dict:
     with CONFIG_PATH.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f)
+
+
+def _init_sources(sources_cfg: dict) -> list:
+    sources = []
+    for name, cls in SOURCE_REGISTRY.items():
+        if (sources_cfg.get(name) or {}).get("enabled"):
+            sources.append(cls())
+    return sources
 
 
 def _run_one(
@@ -52,7 +67,6 @@ def _run_one(
     city: str | None,
     description: str,
     label: str,
-    discovered_via: str,
     use_fixture: bool,
 ) -> list[dict]:
     """跑一次"抓取 + 抽取"，返回结构化事件列表。"""
@@ -75,6 +89,9 @@ def _run_one(
         except Exception as e:
             print(f"[fetch] 失败: {e}")
             return []
+        if not raw:
+            print(f"[fetch] {source.name} 跳过此查询（不支持，如 city 未配置）")
+            return []
         raw_path = source.raw_path(RAW_DIR, query, fetched_at)
         raw_path.write_text(raw, encoding="utf-8")
         raw_ref = str(raw_path.relative_to(ROOT))
@@ -88,7 +105,7 @@ def _run_one(
     )
     for e in events:
         e["raw_ref"] = raw_ref
-        e["discovered_via"] = discovered_via
+        e["discovered_via"] = source.discovered_via(query, city)
     print(f"[extract] 抽到 {len(events)} 条结构化记录")
     return events
 
@@ -116,17 +133,21 @@ def main() -> None:
     local_keywords: list[str] = local.get("keywords") or []
     sources_cfg: dict = config.get("sources") or {}
 
-    if not sources_cfg.get("damai", {}).get("enabled", False):
-        print("damai 源未启用 (config.yaml: sources.damai.enabled = true).")
+    sources = _init_sources(sources_cfg)
+    if not sources:
+        print("没有启用任何 source（config.yaml: sources.*.enabled = true）")
         return
 
     RAW_DIR.mkdir(parents=True, exist_ok=True)
-    source = DamaiSource()
 
     if args.init_profile:
+        damai = next((s for s in sources if isinstance(s, DamaiSource)), None)
+        if not damai:
+            print("--init-profile 仅大麦需要（sources.damai.enabled = true 才生效）")
+            return
         seed = artists[0] if artists else (local_keywords[0] if local_keywords else "周杰伦")
         print(f"[init-profile] 用 '{seed}' 打开大麦搜索页...")
-        source.init_profile(seed)
+        damai.init_profile(seed)
         return
 
     if not artists and not local_keywords:
@@ -136,8 +157,7 @@ def main() -> None:
     init_db()
     all_events: list[dict] = []
 
-    # 拼出所有查询任务，统一调度（方便在它们之间加随机间隔）。
-    # discovered_via 是给用户看的字符串："你在哪个 App 搜什么关键词能复现到这条"。
+    # 拼出所有查询任务（每个 source 都会跑一遍）
     tasks: list[dict] = []
     for artist in artists:
         tasks.append({
@@ -145,7 +165,6 @@ def main() -> None:
             "city": None,
             "description": f"与艺人「{artist}」相关的演唱会 / 演出场次（任何城市）",
             "label": f"艺人={artist} (全国)",
-            "discovered_via": f"大麦 App · 搜「{artist}」（全国）",
         })
     for keyword in local_keywords:
         tasks.append({
@@ -153,26 +172,28 @@ def main() -> None:
             "city": local_city,
             "description": f"在「{local_city}」举办的{keyword}相关的演出 / 展览 / 活动",
             "label": f"本地={keyword}@{local_city}",
-            "discovered_via": f"大麦 App · 搜「{keyword}」（{local_city}）",
         })
 
-    for i, t in enumerate(tasks):
-        # 抓取之间随机间隔（fixture 模式无外部请求，无需间隔）
-        if i > 0 and not args.fixture:
-            interval = random.uniform(*FETCH_INTERVAL_RANGE)
-            print(f"\n[interval] 间隔 {interval:.1f}s 防止触发风控...")
-            time.sleep(interval)
-
-        events = _run_one(
-            source,
-            query=t["query"],
-            city=t["city"],
-            description=t["description"],
-            label=t["label"],
-            discovered_via=t["discovered_via"],
-            use_fixture=args.fixture,
-        )
-        all_events.extend(events)
+    # 嵌套 loop：每个 source 跑所有 task；interval 用各源自己的 range
+    total_fetch_count = 0
+    for source in sources:
+        print(f"\n>>>>> source: {source.name} (interval={source.fetch_interval_range}) <<<<<")
+        for t in tasks:
+            if total_fetch_count > 0 and not args.fixture:
+                lo, hi = source.fetch_interval_range
+                interval = random.uniform(lo, hi)
+                print(f"\n[interval] {interval:.1f}s ({source.name})")
+                time.sleep(interval)
+            events = _run_one(
+                source,
+                query=t["query"],
+                city=t["city"],
+                description=t["description"],
+                label=t["label"],
+                use_fixture=args.fixture,
+            )
+            all_events.extend(events)
+            total_fetch_count += 1
 
     # 入库 + 去重
     new_count = 0
