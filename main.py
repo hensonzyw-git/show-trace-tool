@@ -32,6 +32,7 @@ from dotenv import load_dotenv
 from db import get_unnotified_events, init_db, mark_notified, upsert_event
 from extractor import extract_events
 from notifiers.feishu import FeishuNotifier
+from notifiers.feishu_app import FeishuAppNotifier
 from notifiers.macos import MacosNotifier
 from notifiers.markdown import MarkdownNotifier
 from sources.damai import DamaiSource
@@ -208,11 +209,18 @@ def main() -> None:
     print(f"\n=== 入库: {len(all_events)} 条抽取结果中 {new_count} 条是新事件 ===")
 
     # 通知（只处理 notified_at IS NULL 的）。每个 notifier 跑一遍：
-    # - Markdown 写完整 digest 文件
-    # - macOS 弹系统通知（launchd 后台跑时也能进通知中心）
-    # - 飞书 webhook 推 Top 5（手机上能收到，需 .env 配 FEISHU_WEBHOOK_URL）
+    # - Markdown        写完整 digest 文件
+    # - macOS           弹系统通知（launchd 后台跑时也能进通知中心）
+    # - 飞书 webhook    推 Top 5 到群机器人（需 FEISHU_WEBHOOK_URL）
+    # - 飞书自建应用    推 Top 5 到指定 chat/user（需 APP_ID + APP_SECRET + RECEIVE_ID）
+    # 各 notifier 缺配置时静默跳过；同时开多个就同时推。
     unnotified = get_unnotified_events()
-    for notifier in (MarkdownNotifier(), MacosNotifier(), FeishuNotifier()):
+    for notifier in (
+        MarkdownNotifier(),
+        MacosNotifier(),
+        FeishuNotifier(),
+        FeishuAppNotifier(),
+    ):
         notifier.notify(unnotified)
     mark_notified([e["id"] for e in unnotified])
 

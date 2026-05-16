@@ -74,15 +74,28 @@ DEEPSEEK_API_KEY=sk-xxx
 FEISHU_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/xxx
 ```
 
-### 飞书 webhook 配置（可选）
+### 飞书推送（可选，两种方式任选）
 
-如果想 launchd 自动跑时手机也能收到推送：
+**方式 A：群机器人 webhook（最简单，绑定一个群）**
 
-1. 在飞书任意群（可以只有你自己的群）右上角点 **设置 → 群机器人 → 添加机器人 → 自定义机器人**
-2. 给机器人取个名字（如"演出监控"），复制下面的 webhook URL
-3. 把 URL 填到 `.env::FEISHU_WEBHOOK_URL`
+1. 在飞书任意群右上角点 **设置 → 群机器人 → 添加机器人 → 自定义机器人**
+2. 复制 webhook URL，填到 `.env::FEISHU_WEBHOOK_URL`
 
-之后每次跑 `main.py` 会自动推 Top 5（按日期升序的今天及以后事件）到群里。完整 digest 仍在本地 `data/digests/`。
+**方式 B：自建应用机器人（更灵活，能推到任意 chat/user/email）**
+
+适合你在飞书开放平台已经有自建应用、配过 `im:message:send_as_bot` 权限的场景。
+
+1. 在 [飞书开放平台](https://open.feishu.cn/) 拿你的 `app_id` / `app_secret`
+2. 拿到目标 `receive_id`（chat_id / open_id / user_id 或邮箱）
+3. 填到 `.env`：
+   ```
+   FEISHU_APP_ID=cli_xxx
+   FEISHU_APP_SECRET=xxx
+   FEISHU_RECEIVE_ID=oc_xxx 或邮箱
+   FEISHU_RECEIVE_ID_TYPE=chat_id  # 或 open_id / email / user_id
+   ```
+
+两种方式都配的话两边都会推（不冲突）。每次跑 `main.py` 自动推 Top 5（按日期升序的今天及以后事件）。完整 digest 仍在本地 `data/digests/`。
 
 ## 项目结构
 
