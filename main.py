@@ -31,6 +31,7 @@ from dotenv import load_dotenv
 
 from db import get_unnotified_events, init_db, mark_notified, upsert_event
 from extractor import extract_events
+from notifiers.macos import MacosNotifier
 from notifiers.markdown import MarkdownNotifier
 from sources.damai import DamaiSource
 from sources.motianlun import MotianlunSource
@@ -205,10 +206,12 @@ def main() -> None:
             new_count += 1
     print(f"\n=== 入库: {len(all_events)} 条抽取结果中 {new_count} 条是新事件 ===")
 
-    # 通知（只处理 notified_at IS NULL 的）
+    # 通知（只处理 notified_at IS NULL 的）。每个 notifier 跑一遍：
+    # - Markdown 写完整 digest 文件
+    # - macOS 弹系统通知（launchd 后台跑时也能进通知中心）
     unnotified = get_unnotified_events()
-    notifier = MarkdownNotifier()
-    notifier.notify(unnotified)
+    for notifier in (MarkdownNotifier(), MacosNotifier()):
+        notifier.notify(unnotified)
     mark_notified([e["id"] for e in unnotified])
 
     if all_events:

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.zhuyawei.show-trace-tool</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/zhuyawei/Henson's Project/Show trace tool/venv/bin/python</string>
+        <string>/Users/zhuyawei/Henson's Project/Show trace tool/main.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/zhuyawei/Henson's Project/Show trace tool</string>
+
+    <!-- 每天 10:00 触发（演出大多上午 10 点开票，10 点跑能尽早捕获新事件） -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>10</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- stdout / stderr 都汇到一个 log，方便排查 -->
+    <key>StandardOutPath</key>
+    <string>/Users/zhuyawei/Henson's Project/Show trace tool/data/launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/zhuyawei/Henson's Project/Show trace tool/data/launchd.log</string>
+
+    <!-- 让 launchd job 能找到 brew 安装的 chromium / git 等 -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <!-- 加载 plist 时不立刻跑（避免每次 launchctl load 都跑），靠 StartCalendarInterval -->
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
