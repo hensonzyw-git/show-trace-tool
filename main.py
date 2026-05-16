@@ -31,6 +31,7 @@ from dotenv import load_dotenv
 
 from db import get_unnotified_events, init_db, mark_notified, upsert_event
 from extractor import extract_events
+from notifiers.feishu import FeishuNotifier
 from notifiers.macos import MacosNotifier
 from notifiers.markdown import MarkdownNotifier
 from sources.damai import DamaiSource
@@ -209,8 +210,9 @@ def main() -> None:
     # 通知（只处理 notified_at IS NULL 的）。每个 notifier 跑一遍：
     # - Markdown 写完整 digest 文件
     # - macOS 弹系统通知（launchd 后台跑时也能进通知中心）
+    # - 飞书 webhook 推 Top 5（手机上能收到，需 .env 配 FEISHU_WEBHOOK_URL）
     unnotified = get_unnotified_events()
-    for notifier in (MarkdownNotifier(), MacosNotifier()):
+    for notifier in (MarkdownNotifier(), MacosNotifier(), FeishuNotifier()):
         notifier.notify(unnotified)
     mark_notified([e["id"] for e in unnotified])
 

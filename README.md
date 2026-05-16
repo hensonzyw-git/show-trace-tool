@@ -69,7 +69,20 @@ sources:           # 启用的抓取源
 
 ```
 DEEPSEEK_API_KEY=sk-xxx
+
+# 可选：飞书 webhook，配了就推 Top 5 到飞书群（手机也收到）
+FEISHU_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/xxx
 ```
+
+### 飞书 webhook 配置（可选）
+
+如果想 launchd 自动跑时手机也能收到推送：
+
+1. 在飞书任意群（可以只有你自己的群）右上角点 **设置 → 群机器人 → 添加机器人 → 自定义机器人**
+2. 给机器人取个名字（如"演出监控"），复制下面的 webhook URL
+3. 把 URL 填到 `.env::FEISHU_WEBHOOK_URL`
+
+之后每次跑 `main.py` 会自动推 Top 5（按日期升序的今天及以后事件）到群里。完整 digest 仍在本地 `data/digests/`。
 
 ## 项目结构
 
