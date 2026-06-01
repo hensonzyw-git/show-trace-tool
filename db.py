@@ -10,6 +10,7 @@
 """
 
 import hashlib
+import json
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
@@ -49,7 +50,35 @@ CREATE TABLE IF NOT EXISTS raw_captures (
     file_path       TEXT,
     processed       INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id              TEXT PRIMARY KEY,
+    artists         TEXT NOT NULL,
+    local_city      TEXT,
+    local_keywords  TEXT NOT NULL,
+    sources         TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS runs (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    trigger                 TEXT NOT NULL,
+    fixture                 INTEGER NOT NULL DEFAULT 0,
+    notify                  INTEGER NOT NULL DEFAULT 1,
+    started_at              TEXT NOT NULL,
+    finished_at             TEXT,
+    status                  TEXT NOT NULL,
+    total_raw_captures      INTEGER NOT NULL DEFAULT 0,
+    total_extracted_events  INTEGER NOT NULL DEFAULT 0,
+    new_events              INTEGER NOT NULL DEFAULT 0,
+    notified_events         INTEGER NOT NULL DEFAULT 0,
+    error_summary           TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_runs_started_at ON runs(started_at);
 """
+
+DEFAULT_SUBSCRIPTION_ID = "default"
 
 
 def make_event_id(event: dict) -> str:
@@ -86,6 +115,94 @@ def init_db() -> None:
         cols = {row[1] for row in c.execute("PRAGMA table_info(events)").fetchall()}
         if "discovered_via" not in cols:
             c.execute("ALTER TABLE events ADD COLUMN discovered_via TEXT")
+
+
+def subscription_from_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Normalize config.yaml shape into the subscription API shape."""
+    local = config.get("local") or {}
+    return {
+        "id": DEFAULT_SUBSCRIPTION_ID,
+        "artists": config.get("artists") or [],
+        "local": {
+            "city": local.get("city"),
+            "keywords": local.get("keywords") or [],
+        },
+        "sources": config.get("sources") or {},
+    }
+
+
+def ensure_subscription_from_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Create the default subscription from config.yaml if it does not exist."""
+    init_db()
+    current = get_subscription()
+    if current:
+        return current
+    sub = subscription_from_config(config)
+    save_subscription(sub)
+    return sub
+
+
+def get_subscription() -> dict[str, Any] | None:
+    init_db()
+    with _conn() as c:
+        row = c.execute(
+            "SELECT * FROM subscriptions WHERE id = ?",
+            (DEFAULT_SUBSCRIPTION_ID,),
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "artists": json.loads(row["artists"]),
+        "local": {
+            "city": row["local_city"],
+            "keywords": json.loads(row["local_keywords"]),
+        },
+        "sources": json.loads(row["sources"]),
+        "updated_at": row["updated_at"],
+    }
+
+
+def save_subscription(subscription: dict[str, Any]) -> dict[str, Any]:
+    """Upsert the single-user subscription record."""
+    init_db()
+    local = subscription.get("local") or {}
+    normalized = {
+        "id": DEFAULT_SUBSCRIPTION_ID,
+        "artists": list(subscription.get("artists") or []),
+        "local": {
+            "city": local.get("city"),
+            "keywords": list(local.get("keywords") or []),
+        },
+        "sources": dict(subscription.get("sources") or {}),
+    }
+    now = datetime.now().isoformat(timespec="seconds")
+    with _conn() as c:
+        c.execute(
+            """
+            INSERT INTO subscriptions
+            (id, artists, local_city, local_keywords, sources, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                artists = excluded.artists,
+                local_city = excluded.local_city,
+                local_keywords = excluded.local_keywords,
+                sources = excluded.sources,
+                updated_at = excluded.updated_at
+            """,
+            (
+                normalized["id"],
+                json.dumps(normalized["artists"], ensure_ascii=False),
+                normalized["local"]["city"],
+                json.dumps(normalized["local"]["keywords"], ensure_ascii=False),
+                json.dumps(normalized["sources"], ensure_ascii=False),
+                now,
+            ),
+        )
+    saved = get_subscription()
+    if saved is None:
+        raise RuntimeError("subscription save failed")
+    return saved
 
 
 def upsert_event(event: dict[str, Any]) -> tuple[str, bool]:
@@ -166,3 +283,93 @@ def mark_notified(event_ids: list[str]) -> None:
             f"UPDATE events SET notified_at = ? WHERE id IN ({placeholders})",
             (now, *event_ids),
         )
+
+
+def create_run(*, trigger: str, fixture: bool, notify: bool) -> int:
+    init_db()
+    now = datetime.now().isoformat(timespec="seconds")
+    with _conn() as c:
+        cur = c.execute(
+            """
+            INSERT INTO runs (trigger, fixture, notify, started_at, status)
+            VALUES (?, ?, ?, ?, 'running')
+            """,
+            (trigger, int(fixture), int(notify), now),
+        )
+        return int(cur.lastrowid)
+
+
+def finish_run(
+    run_id: int,
+    *,
+    status: str,
+    total_raw_captures: int,
+    total_extracted_events: int,
+    new_events: int,
+    notified_events: int,
+    error_summary: str | None = None,
+) -> None:
+    now = datetime.now().isoformat(timespec="seconds")
+    with _conn() as c:
+        c.execute(
+            """
+            UPDATE runs SET
+                finished_at = ?,
+                status = ?,
+                total_raw_captures = ?,
+                total_extracted_events = ?,
+                new_events = ?,
+                notified_events = ?,
+                error_summary = ?
+            WHERE id = ?
+            """,
+            (
+                now,
+                status,
+                total_raw_captures,
+                total_extracted_events,
+                new_events,
+                notified_events,
+                error_summary,
+                run_id,
+            ),
+        )
+
+
+def list_runs(limit: int = 20, offset: int = 0) -> list[dict[str, Any]]:
+    init_db()
+    with _conn() as c:
+        rows = c.execute(
+            """
+            SELECT *
+            FROM runs
+            ORDER BY started_at DESC, id DESC
+            LIMIT ? OFFSET ?
+            """,
+            (limit, offset),
+        ).fetchall()
+    return [_run_to_dict(row) for row in rows]
+
+
+def get_run(run_id: int) -> dict[str, Any] | None:
+    init_db()
+    with _conn() as c:
+        row = c.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    return _run_to_dict(row) if row else None
+
+
+def _run_to_dict(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "trigger": row["trigger"],
+        "fixture": bool(row["fixture"]),
+        "notify": bool(row["notify"]),
+        "started_at": row["started_at"],
+        "finished_at": row["finished_at"],
+        "status": row["status"],
+        "total_raw_captures": row["total_raw_captures"],
+        "total_extracted_events": row["total_extracted_events"],
+        "new_events": row["new_events"],
+        "notified_events": row["notified_events"],
+        "error_summary": row["error_summary"],
+    }

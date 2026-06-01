@@ -1,16 +1,35 @@
-"""FastAPI entrypoint for the service-side Phase 1 API."""
+"""FastAPI entrypoint for the show trace service API."""
 
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from app.database import count_events, database_exists, list_events, read_digest
+from app.pipeline import bootstrap_subscription, run_pipeline
+from db import list_runs, save_subscription
 
 app = FastAPI(
     title="Show Trace Tool API",
-    description="Read-only API for daily performance and activity digests.",
-    version="0.1.0",
+    description="API for daily performance digests, subscriptions, and worker runs.",
+    version="0.3.0",
 )
+
+
+class LocalSubscription(BaseModel):
+    city: str | None = None
+    keywords: list[str] = Field(default_factory=list)
+
+
+class SubscriptionPayload(BaseModel):
+    artists: list[str] = Field(default_factory=list)
+    local: LocalSubscription = Field(default_factory=LocalSubscription)
+    sources: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
+class RunRequest(BaseModel):
+    fixture: bool = False
+    notify: bool = True
 
 
 @app.get("/health")
@@ -52,3 +71,34 @@ def get_today_digest() -> dict[str, Any]:
     if digest is None:
         raise HTTPException(status_code=404, detail="Today's digest has not been generated")
     return digest
+
+
+@app.get("/api/subscriptions")
+def get_default_subscription() -> dict[str, Any]:
+    return bootstrap_subscription()
+
+
+@app.put("/api/subscriptions")
+def update_default_subscription(payload: SubscriptionPayload) -> dict[str, Any]:
+    return save_subscription(payload.model_dump())
+
+
+@app.post("/api/runs")
+def create_manual_run(payload: RunRequest) -> dict[str, Any]:
+    return run_pipeline(
+        use_fixture=payload.fixture,
+        notify=payload.notify,
+        trigger="api",
+    )
+
+
+@app.get("/api/runs")
+def get_runs(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> dict[str, Any]:
+    return {
+        "items": list_runs(limit=limit, offset=offset),
+        "limit": limit,
+        "offset": offset,
+    }

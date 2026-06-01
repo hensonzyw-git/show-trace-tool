@@ -18,7 +18,7 @@
 | 本地发现 | `local.keywords` + `local.city` | 限定 | 不限艺人，按关键词找本地的演唱会、展览、音乐节、活动 |
 
 抓取层（`sources.*`）刻意把 `city` 作为 `fetch_raw(query, city=...)` 的可选参数，
-而不是 Source 的实例属性 —— 同一个 Source 实例两个维度都能用，由 main.py 决定怎么传。
+而不是 Source 的实例属性 —— 同一个 Source 实例两个维度都能用，由 `app/pipeline.py` 决定怎么传。
 
 ## 已锁定的决策（改起来贵的部分）
 
@@ -40,16 +40,16 @@
 
 ## 多源：每个源独立 Source 子类 + SOURCE_REGISTRY 注册
 
-`main.py::SOURCE_REGISTRY` 注册所有 source 类。加新源 3 步：
+`app/pipeline.py::SOURCE_REGISTRY` 注册所有 source 类。加新源 3 步：
 1. `sources/<name>.py` 实现 Source 子类（`fetch_raw` + 通常 `discovered_via`）
 2. SOURCE_REGISTRY 加一行 `"<name>": <Class>`
-3. `config.yaml` `sources.<name>.enabled: true`
+3. 订阅配置里设置 `sources.<name>.enabled: true`（首次会从 `config.yaml` 初始化）
 
 每个 source 自带两个 class attr / method 反映"此源代价模型"：
 - `fetch_interval_range`: 此源两次 fetch 之间的随机间隔范围（秒）。反爬强弱差异巨大：大麦 6-12s，秀动 1-3s
 - `discovered_via(query, city)`: 给 digest 渲染用的"用户视角在哪发现"字符串。每个源按自己的交互模型 override（搜索式 / 浏览式）
 
-main.py 嵌套 loop：每个 source 跑所有 task；interval 用各源自己的 range。`_run_one` 在 `raw == ""` 时优雅跳过，给"此源不支持当前查询"留口子。
+`app/pipeline.py` 嵌套 loop：每个 source 跑所有 task；interval 用各源自己的 range。`_run_one` 在 `raw == ""` 时优雅跳过，给"此源不支持当前查询"留口子。
 
 当前接入的源：
 

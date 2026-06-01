@@ -21,9 +21,9 @@
 - `data/digests/digest_YYYY-MM-DD.md` —— Markdown 摘要（Top N + 按日期分组）
 - macOS 通知中心 —— "X 条新事件" 提醒
 
-## 本地 API（Phase 1）
+## 本地 API（Phase 1-3）
 
-服务端化第一步先提供只读 API，不改变现有每日采集流程：
+服务端化 API 已支持事件 / 摘要读取、订阅配置修改、运行记录和手动触发：
 
 ```bash
 ./venv/bin/uvicorn app.api:app --reload
@@ -33,7 +33,20 @@
 - `http://127.0.0.1:8000/health` —— 健康检查
 - `http://127.0.0.1:8000/api/events` —— 事件列表
 - `http://127.0.0.1:8000/api/digests/today` —— 今日 Markdown 摘要
+- `http://127.0.0.1:8000/api/subscriptions` —— 当前订阅配置（GET / PUT）
+- `http://127.0.0.1:8000/api/runs` —— 最近运行记录（GET）或手动触发一次（POST）
 - `http://127.0.0.1:8000/docs` —— OpenAPI 文档
+
+首次启动 API 或 worker 时，会把 `config.yaml` 迁移成数据库里的默认订阅；
+之后修改订阅可以走 `PUT /api/subscriptions`，下一次采集会读取数据库配置。
+
+手动触发一次 fixture 验证：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/runs \
+  -H 'Content-Type: application/json' \
+  -d '{"fixture": true, "notify": false}'
+```
 
 ## 自动化（launchd 每天 10:00 跑）
 
@@ -114,10 +127,14 @@ FEISHU_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/xxx
 ## 项目结构
 
 ```
-main.py                 编排：抓取 → LLM 抽取 → 入库去重 → 通知
-config.yaml             艺人 / 城市 / 启用的源
+main.py                 CLI 入口：调用 app/pipeline.py 跑每日任务
+app/
+  api.py                FastAPI：事件 / 摘要 / 订阅 / 运行记录 API
+  database.py           API 只读查询 helper
+  pipeline.py           编排：订阅 → 抓取 → LLM 抽取 → 入库去重 → 通知 / 运行记录
+config.yaml             首次初始化订阅用的艺人 / 城市 / 启用源配置
 .env                    DeepSeek API key（gitignore）
-db.py                   SQLite schema + upsert / 查询
+db.py                   SQLite schema + upsert / 订阅 / 运行记录
 extractor.py            LLM 抽取（DeepSeek）
 sources/
   base.py               Source 抽象基类 + fetch cache helper
