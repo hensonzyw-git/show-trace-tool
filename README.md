@@ -21,6 +21,20 @@
 - `data/digests/digest_YYYY-MM-DD.md` —— Markdown 摘要（Top N + 按日期分组）
 - macOS 通知中心 —— "X 条新事件" 提醒
 
+## 本地 API（Phase 1）
+
+服务端化第一步先提供只读 API，不改变现有每日采集流程：
+
+```bash
+./venv/bin/uvicorn app.api:app --reload
+```
+
+打开：
+- `http://127.0.0.1:8000/health` —— 健康检查
+- `http://127.0.0.1:8000/api/events` —— 事件列表
+- `http://127.0.0.1:8000/api/digests/today` —— 今日 Markdown 摘要
+- `http://127.0.0.1:8000/docs` —— OpenAPI 文档
+
 ## 自动化（launchd 每天 10:00 跑）
 
 把 plist 模板装到用户 LaunchAgents：
