@@ -5,11 +5,11 @@ module. Keeping the workflow here makes Phase 2/3 behave like a service without
 breaking the existing launchd entrypoint.
 """
 
+import os
 import random
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 import yaml
@@ -32,11 +32,7 @@ from notifiers.markdown import MarkdownNotifier
 from sources.damai import DamaiSource
 from sources.motianlun import MotianlunSource
 from sources.showstart import ShowstartSource
-
-ROOT = Path(__file__).resolve().parent.parent
-CONFIG_PATH = ROOT / "config.yaml"
-RAW_DIR = ROOT / "data" / "raw"
-FIXTURE_DIR = ROOT / "data" / "fixtures"
+from app.paths import CONFIG_PATH, FIXTURE_DIR, RAW_DIR, ROOT
 
 SOURCE_REGISTRY: dict[str, type] = {
     "damai": DamaiSource,
@@ -75,7 +71,14 @@ def bootstrap_subscription() -> dict[str, Any]:
 
 def _init_sources(sources_cfg: dict[str, Any]) -> list[Any]:
     sources = []
+    disabled_sources = {
+        name.strip()
+        for name in os.environ.get("SHOW_TRACE_DISABLED_SOURCES", "").split(",")
+        if name.strip()
+    }
     for name, cls in SOURCE_REGISTRY.items():
+        if name in disabled_sources:
+            continue
         if (sources_cfg.get(name) or {}).get("enabled"):
             sources.append(cls())
     return sources
@@ -294,7 +297,7 @@ def _run_one(
             return [], False, None
         raw_path = source.raw_path(RAW_DIR, query, fetched_at)
         raw_path.write_text(raw, encoding="utf-8")
-        raw_ref = str(raw_path.relative_to(ROOT))
+        raw_ref = _display_path(raw_path)
         print(f"[fetch] OK, HTML {len(raw):,} 字节 → {raw_ref}")
 
     events = extract_events(
@@ -308,3 +311,10 @@ def _run_one(
         event["discovered_via"] = source.discovered_via(query, city)
     print(f"[extract] 抽到 {len(events)} 条结构化记录")
     return events, True, None
+
+
+def _display_path(path) -> str:
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)

@@ -2,12 +2,17 @@
 
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
+from dotenv import load_dotenv
 
+from app.auth import require_api_token
 from app.database import count_events, database_exists, list_events, read_digest
+from app.paths import ROOT
 from app.pipeline import bootstrap_subscription, run_pipeline
 from db import list_runs, save_subscription
+
+load_dotenv(ROOT / ".env")
 
 app = FastAPI(
     title="Show Trace Tool API",
@@ -42,6 +47,7 @@ def health() -> dict[str, Any]:
 
 @app.get("/api/events")
 def get_events(
+    _: None = Depends(require_api_token),
     city: str | None = None,
     type: Literal["concert", "exhibition", "activity"] | None = None,
     source: str | None = None,
@@ -66,7 +72,7 @@ def get_events(
 
 
 @app.get("/api/digests/today")
-def get_today_digest() -> dict[str, Any]:
+def get_today_digest(_: None = Depends(require_api_token)) -> dict[str, Any]:
     digest = read_digest()
     if digest is None:
         raise HTTPException(status_code=404, detail="Today's digest has not been generated")
@@ -74,17 +80,23 @@ def get_today_digest() -> dict[str, Any]:
 
 
 @app.get("/api/subscriptions")
-def get_default_subscription() -> dict[str, Any]:
+def get_default_subscription(_: None = Depends(require_api_token)) -> dict[str, Any]:
     return bootstrap_subscription()
 
 
 @app.put("/api/subscriptions")
-def update_default_subscription(payload: SubscriptionPayload) -> dict[str, Any]:
+def update_default_subscription(
+    payload: SubscriptionPayload,
+    _: None = Depends(require_api_token),
+) -> dict[str, Any]:
     return save_subscription(payload.model_dump())
 
 
 @app.post("/api/runs")
-def create_manual_run(payload: RunRequest) -> dict[str, Any]:
+def create_manual_run(
+    payload: RunRequest,
+    _: None = Depends(require_api_token),
+) -> dict[str, Any]:
     return run_pipeline(
         use_fixture=payload.fixture,
         notify=payload.notify,
@@ -94,6 +106,7 @@ def create_manual_run(payload: RunRequest) -> dict[str, Any]:
 
 @app.get("/api/runs")
 def get_runs(
+    _: None = Depends(require_api_token),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> dict[str, Any]:

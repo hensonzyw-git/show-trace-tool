@@ -12,11 +12,9 @@
 
 import re
 from datetime import datetime
-from pathlib import Path
 
+from app.paths import DIGEST_DIR
 from notifiers.base import Notifier
-
-DIGEST_DIR = Path(__file__).resolve().parent.parent / "data" / "digests"
 
 TYPE_LABEL = {
     "concert": "🎤 演唱会 / 演出",

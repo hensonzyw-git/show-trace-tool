@@ -5,15 +5,12 @@ This module gives the API a small query surface without changing the current
 daily pipeline.
 """
 
-import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
-from pathlib import Path
 from typing import Any
+import sqlite3
 
-ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT / "data" / "events.db"
-DIGEST_DIR = ROOT / "data" / "digests"
+from app.paths import DB_PATH, DIGEST_DIR, ROOT
 
 
 @contextmanager

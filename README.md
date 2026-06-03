@@ -3,6 +3,7 @@
 本地部署的个人工具，每天自动抓取大麦 / 秀动 / 摩天轮三个平台的上海演出 + 关注艺人全国巡演信息，去重后生成 Markdown 摘要 + macOS 系统通知。
 
 完整需求和架构见 [《演出活动监控-需求与Roadmap.md》](演出活动监控-需求与Roadmap.md) 和 [ARCHITECTURE.md](ARCHITECTURE.md)。
+云端部署见 [DEPLOYMENT.md](DEPLOYMENT.md)。
 
 ## 日常使用
 
@@ -36,6 +37,9 @@
 - `http://127.0.0.1:8000/api/subscriptions` —— 当前订阅配置（GET / PUT）
 - `http://127.0.0.1:8000/api/runs` —— 最近运行记录（GET）或手动触发一次（POST）
 - `http://127.0.0.1:8000/docs` —— OpenAPI 文档
+
+如果设置了 `API_TOKEN`，所有 `/api/*` 请求都需要 `Authorization: Bearer <token>`。
+`/health` 保持公开，方便云平台健康检查。
 
 首次启动 API 或 worker 时，会把 `config.yaml` 迁移成数据库里的默认订阅；
 之后修改订阅可以走 `PUT /api/subscriptions`，下一次采集会读取数据库配置。
@@ -148,4 +152,7 @@ notifiers/
 launchd/                launchd plist 模板
 data/                   gitignore 的运行时数据：DB / raw / digests / log
   fixtures/             ←  这个不 ignore，是抽取链路的稳定参照样本
+config.cloud.yaml       云端首次初始化订阅用配置（默认禁用大麦）
+render.yaml             Render Blueprint（API + cron 触发器）
+DEPLOYMENT.md           云端部署说明
 ```

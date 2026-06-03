@@ -1,0 +1,54 @@
+# Render Blueprint for Phase 4 cloud deployment.
+#
+# The cron job triggers the web service over HTTP so the worker writes to the
+# web service's persistent disk. Render cron jobs cannot attach the same disk.
+
+services:
+  - type: web
+    name: show-trace-tool-api
+    runtime: python
+    region: singapore
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    disk:
+      name: show-trace-tool-data
+      mountPath: /var/data/show-trace-tool
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: SHOW_TRACE_DATA_DIR
+        value: /var/data/show-trace-tool
+      - key: SHOW_TRACE_CONFIG_PATH
+        value: config.cloud.yaml
+      - key: API_TOKEN
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: FEISHU_WEBHOOK_URL
+        sync: false
+      - key: FEISHU_APP_ID
+        sync: false
+      - key: FEISHU_APP_SECRET
+        sync: false
+      - key: FEISHU_RECEIVE_ID
+        sync: false
+      - key: FEISHU_RECEIVE_ID_TYPE
+        value: chat_id
+
+  - type: cron
+    name: show-trace-tool-daily-run
+    runtime: python
+    region: singapore
+    schedule: "0 2 * * *"
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: >-
+      python scripts/trigger_cloud_run.py
+    envVars:
+      - key: SHOW_TRACE_API_BASE_URL
+        sync: false
+      - key: API_TOKEN
+        sync: false

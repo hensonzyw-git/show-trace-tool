@@ -1,0 +1,27 @@
+# Cloud seed config for Phase 4.
+#
+# This is used only when SHOW_TRACE_CONFIG_PATH=config.cloud.yaml and the
+# database does not yet have a default subscription. After the first boot,
+# edit subscriptions through the API.
+
+artists:
+  - 周杰伦
+
+local:
+  city: 上海
+  keywords:
+    - 演唱会
+    - 展览
+    - 音乐节
+
+sources:
+  # Browser-backed source. Keep disabled for the first cloud deployment because
+  # cloud IP, Chrome profile, and captcha handling are not stable yet.
+  damai:
+    enabled: false
+
+  # Stable HTTP/API sources for the first cloud worker.
+  showstart:
+    enabled: true
+  motianlun:
+    enabled: true
