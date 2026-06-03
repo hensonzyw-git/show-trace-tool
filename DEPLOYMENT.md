@@ -203,6 +203,8 @@ curl -H "Authorization: Bearer $API_TOKEN" \
 
 不建议直接长期暴露 `8000/tcp`。生产访问建议走 Nginx 反代到本机 `127.0.0.1:8000`。
 
+如果 `curl http://<server-ip>/health` 在服务器本机正常，但公网访问为空响应或失败，优先检查阿里云安全组是否已经添加 `80/tcp` 入方向规则。
+
 ### 4.3 服务器初始化
 
 登录服务器：
@@ -211,11 +213,11 @@ curl -H "Authorization: Bearer $API_TOKEN" \
 ssh root@<server-ip>
 ```
 
-安装基础依赖：
+安装基础依赖。Ubuntu 24.04 默认 Python 是 3.12，这个项目可以直接用系统 `python3` 创建虚拟环境：
 
 ```bash
 apt update
-apt install -y git python3.11 python3.11-venv python3-pip nginx sqlite3
+apt install -y git python3 python3-venv python3-pip nginx sqlite3 cron
 ```
 
 创建目录：
@@ -234,7 +236,7 @@ git clone https://github.com/hensonzyw-git/show-trace-tool.git .
 创建虚拟环境：
 
 ```bash
-python3.11 -m venv venv
+python3 -m venv venv
 ./venv/bin/pip install -r requirements.txt
 ```
 
