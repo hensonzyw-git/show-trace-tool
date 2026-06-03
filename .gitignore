@@ -7,6 +7,8 @@ data/raw/
 data/digests/
 data/events.db
 data/launchd.log
+data/local_inbox/*.json
+!data/local_inbox/.gitkeep
 
 # Claude Code session data
 .claude/

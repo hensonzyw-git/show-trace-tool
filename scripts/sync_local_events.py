@@ -26,7 +26,11 @@ def main() -> None:
         payload["trigger"] = args.trigger
 
     base_url = (args.api_base_url or os.environ.get("SHOW_TRACE_API_BASE_URL") or "").rstrip("/")
-    token = args.api_token or os.environ.get("API_TOKEN")
+    token = (
+        args.api_token
+        or os.environ.get("SHOW_TRACE_CLOUD_API_TOKEN")
+        or os.environ.get("API_TOKEN")
+    )
     if not base_url:
         raise SystemExit("Missing SHOW_TRACE_API_BASE_URL or --api-base-url")
     if not token:

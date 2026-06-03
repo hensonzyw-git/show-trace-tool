@@ -1,14 +1,15 @@
 # 演出活动监控
 
-本地部署的个人工具，每天自动抓取大麦 / 秀动 / 摩天轮三个平台的上海演出 + 关注艺人全国巡演信息，去重后生成 Markdown 摘要 + macOS 系统通知。
+个人演出活动监控工具。当前稳定源在云端 ECS 每天自动跑，本机只负责小红书 / 大麦等困难源的辅助采集，并把结构化结果同步到云端。
 
 完整需求和架构见 [《演出活动监控-需求与Roadmap.md》](演出活动监控-需求与Roadmap.md) 和 [ARCHITECTURE.md](ARCHITECTURE.md)。
 云端部署见 [DEPLOYMENT.md](DEPLOYMENT.md)。
+本机辅助采集见 [LOCAL_AUTOMATION.md](LOCAL_AUTOMATION.md)。
 
-## 日常使用
+## 本地手动运行
 
 ```bash
-# 手动跑一次（也是 launchd 调用的命令）
+# 手动跑一次完整本地 worker（调试用；正式稳定源已经交给云端）
 ./venv/bin/python main.py
 
 # 用 fixture（绕开抓取，验证 LLM 抽取链路）
@@ -86,27 +87,21 @@ JSON 可以是事件数组，也可以是：
 
 导入接口会复用 `events.id` 去重逻辑：同一事件重复上传会更新易变字段，不会重复入库。
 
-## 自动化（launchd 每天 10:00 跑）
+## 本机辅助采集
 
-把 plist 模板装到用户 LaunchAgents：
+本机不再安装 launchd 定时任务。困难源先通过 Chrome / Computer Use / 人工接管整理成 JSON，放到：
 
-```bash
-# 一次性安装
-cp "launchd/com.zhuyawei.show-trace-tool.plist" ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.zhuyawei.show-trace-tool.plist
-
-# 立即触发一次测试（不等到明早 10:00）
-launchctl start com.zhuyawei.show-trace-tool
-
-# 看跑的日志
-tail -f data/launchd.log
-
-# 卸载
-launchctl unload ~/Library/LaunchAgents/com.zhuyawei.show-trace-tool.plist
-rm ~/Library/LaunchAgents/com.zhuyawei.show-trace-tool.plist
+```text
+data/local_inbox/
 ```
 
-第一次 launchd 触发时 macOS 可能弹"是否允许 Python 发送通知"，授权一次即可。
+再同步到云端：
+
+```bash
+./venv/bin/python scripts/sync_local_events.py data/local_inbox/2026-06-03-xiaohongshu.json
+```
+
+详细格式和边界见 [LOCAL_AUTOMATION.md](LOCAL_AUTOMATION.md)。
 
 ## 配置
 
@@ -185,9 +180,9 @@ notifiers/
   base.py               Notifier 抽象基类
   markdown.py           写 data/digests/digest_YYYY-MM-DD.md
   macos.py              macOS 原生系统通知
-launchd/                launchd plist 模板
 data/                   gitignore 的运行时数据：DB / raw / digests / log
   fixtures/             ←  这个不 ignore，是抽取链路的稳定参照样本
+  local_inbox/          本机辅助采集 JSON 暂存目录（JSON 不进 Git）
 config.cloud.yaml       云端首次初始化订阅用配置（默认禁用大麦）
 render.yaml             Render Blueprint（API + cron 触发器）
 DEPLOYMENT.md           云端部署说明

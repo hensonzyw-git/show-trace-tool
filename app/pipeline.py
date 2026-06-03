@@ -46,6 +46,7 @@ class PipelineStats:
     total_raw_captures: int = 0
     total_extracted_events: int = 0
     new_events: int = 0
+    new_event_ids: list[str] = field(default_factory=list)
     notified_events: int = 0
     errors: list[str] = field(default_factory=list)
 
@@ -139,6 +140,7 @@ def run_pipeline(
         "total_raw_captures": stats.total_raw_captures,
         "total_extracted_events": stats.total_extracted_events,
         "new_events": stats.new_events,
+        "new_event_ids": stats.new_event_ids,
         "notified_events": stats.notified_events,
         "errors": stats.errors,
     }
@@ -204,9 +206,10 @@ def _run_pipeline_body(
             total_fetch_count += 1
 
     for event in all_events:
-        _, is_new = upsert_event(event)
+        event_id, is_new = upsert_event(event)
         if is_new:
             stats.new_events += 1
+            stats.new_event_ids.append(event_id)
     print(
         f"\n=== 入库: {len(all_events)} 条抽取结果中 "
         f"{stats.new_events} 条是新事件 ==="

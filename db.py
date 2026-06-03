@@ -272,6 +272,19 @@ def get_unnotified_events() -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_events_by_ids(event_ids: list[str]) -> list[dict[str, Any]]:
+    if not event_ids:
+        return []
+    placeholders = ",".join("?" * len(event_ids))
+    ordering = {event_id: idx for idx, event_id in enumerate(event_ids)}
+    with _conn() as c:
+        rows = c.execute(
+            f"SELECT * FROM events WHERE id IN ({placeholders})",
+            event_ids,
+        ).fetchall()
+    return sorted([dict(r) for r in rows], key=lambda event: ordering.get(event["id"], 0))
+
+
 def mark_notified(event_ids: list[str]) -> None:
     if not event_ids:
         return
