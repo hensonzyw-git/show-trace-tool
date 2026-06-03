@@ -6,13 +6,12 @@ city 不再作为 source 属性，而是 fetch_raw 的可选参数 —— 同一
 - 本地维度：fetch_raw(keyword, city=…)  带 cty 过滤
 
 历史：
-- 里程碑 0：Playwright headless 触发阿里 RGV587 滑块反爬
-- 里程碑 0.5 / A：patchright 替换 Playwright 仍被反爬识别（webdriver
-  信号绕过了，但 IP 行为模式、TLS 指纹等其他维度仍命中风控）
-- 里程碑 0.5 / B（当前）：patchright + launch_persistent_context +
-  channel="chrome"。用项目内独立 user_data_dir（.browser-profile/），
-  通过 channel="chrome" 调用系统真实 Chrome 二进制——指纹更接近正常用户。
-  首次需要 GUI 模式让用户手动浏览一下，建立真实的 cookie/history/指纹痕迹。
+- 里程碑 0：Playwright headless 触发阿里 RGV587 滑块反爬。
+- 里程碑 0.5 / A：patchright 替换 Playwright 仍会被搜索接口风控。
+- 里程碑 0.5 / B：账号态 profile 可以保存登录，但 headless 请求
+  `searchajax.html` 仍会落到 `_____tmd_____/punish` / `newslidecaptcha`。
+- 当前策略：大麦只作为本机 assisted source，优先接管用户日常 Chrome
+  profile 中的可见标签页。不要用 headless 跑账号态，避免频繁触发风控。
 
 刻意只暴露 fetch_raw（搜索页）—— 详情页跟进作为功能被否决（见
 ARCHITECTURE.md 和 memory）。
@@ -34,7 +33,7 @@ class DamaiSource(Source):
 
     SEARCH_URL = "https://search.damai.cn/search.htm"
 
-    def __init__(self, headless: bool = True):
+    def __init__(self, headless: bool = False):
         super().__init__()
         self.headless = headless
 
@@ -62,11 +61,26 @@ class DamaiSource(Source):
         )
 
     def fetch_raw(self, query: str, city: str | None = None) -> tuple[str, str]:
+        if self.headless:
+            raise RuntimeError(
+                "DamaiSource no longer supports headless mode; use visible assisted browsing."
+            )
         url = self._build_url(query, city)
         with sync_playwright() as p:
             ctx = self._launch(p, headless=self.headless)
             try:
                 page = ctx.pages[0] if ctx.pages else ctx.new_page()
+                punished = False
+
+                def on_response(resp):
+                    nonlocal punished
+                    if (
+                        "_____tmd_____/punish" in resp.url
+                        or "newslidecaptcha" in resp.url
+                    ):
+                        punished = True
+
+                page.on("response", on_response)
                 page.goto(url, wait_until="domcontentloaded", timeout=30_000)
                 # 显式等搜索结果列表出现 —— networkidle 在大麦 SPA 上偶尔会
                 # 过早通过（polling/keep-alive 干扰 idle 判定）。selector 没
@@ -83,16 +97,20 @@ class DamaiSource(Source):
                 except Exception:
                     pass
                 page.wait_for_timeout(1500)  # 给最后的 reflow 一点 buffer
-                return page.url, page.content()
+                html = page.content()
+                if punished or "_____tmd_____/punish" in html or "newslidecaptcha" in html:
+                    raise RuntimeError(
+                        "Damai triggered anti-bot verification; switch to manual Computer Use collection."
+                    )
+                return page.url, html
             finally:
                 ctx.close()
 
     def init_profile(self, query: str = "周杰伦") -> None:
-        """开 GUI 模式让用户手动浏览一次，给 profile 建立真实使用痕迹。
+        """Legacy helper: open a project-local Chrome profile for debugging.
 
-        强烈推荐在这一步登录大麦账号 —— 已登录用户被阿里风控触发滑块的
-        概率远低于未登录。登录态会持久化到 .browser-profile/，后续 headless
-        跑就直接是登录态。
+        默认采集路径已经改为日常 Chrome + Codex Chrome Extension /
+        Computer Use。这个方法只保留给隔离调试用，不建议登录长期账号。
 
         query 仅用于打开一个搜索页方便互动，不影响 profile 内容。
         如果遇到滑块验证码，人工滑过最稳定。完成后回终端按 Enter。

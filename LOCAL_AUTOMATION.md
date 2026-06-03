@@ -7,8 +7,8 @@
 
 本机不再做每日全量自动抓取，也不再用 launchd 定时跑旧 worker。本机只负责困难源的辅助采集：
 
-- 小红书：Chrome / Computer Use / 插件 / 人工接管
-- 大麦：本机 Chrome profile / 人工接管
+- 小红书：日常 Chrome / Computer Use / 插件 / 人工接管
+- 大麦：日常 Chrome / Computer Use / 人工接管
 - 其他云端抓取失败的平台
 
 ## 当前原则
@@ -108,3 +108,17 @@ SHOW_TRACE_CLOUD_API_TOKEN=<cloud-api-token>
 3. 产出是标准 JSON，而不是直接写本机数据库。
 
 在此之前，本机流程保持“辅助采集 + 手动同步”，更适合当前阶段。
+
+## 大麦特别说明
+
+不要用 headless 浏览器抓大麦账号态页面。实测即使使用已登录 profile，headless 访问搜索接口也容易触发 `punish` / 滑块验证。
+
+大麦只走正常可见浏览器，并优先使用你日常 Chrome profile：
+
+1. 在你日常 Chrome 中打开大麦。
+2. 通过 Codex Chrome Extension / Computer Use 接管当前标签页。
+3. 像正常用户一样完成搜索、筛选和必要验证。
+4. 从可见页面整理结构化 JSON。
+5. 调用 `scripts/sync_local_events.py` 同步云端。
+
+项目目录里的 `.browser-profile/` 只保留为历史调试用途，不作为默认采集 profile。
