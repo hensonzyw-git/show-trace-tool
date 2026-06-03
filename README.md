@@ -35,6 +35,7 @@
 - `http://127.0.0.1:8000/api/events` —— 事件列表
 - `http://127.0.0.1:8000/api/digests/today` —— 今日 Markdown 摘要
 - `http://127.0.0.1:8000/api/subscriptions` —— 当前订阅配置（GET / PUT）
+- `http://127.0.0.1:8000/api/events/import` —— 本机困难源结构化事件导入（POST）
 - `http://127.0.0.1:8000/api/runs` —— 最近运行记录（GET）或手动触发一次（POST）
 - `http://127.0.0.1:8000/docs` —— OpenAPI 文档
 
@@ -51,6 +52,39 @@ curl -X POST http://127.0.0.1:8000/api/runs \
   -H 'Content-Type: application/json' \
   -d '{"fixture": true, "notify": false}'
 ```
+
+## 本机困难源同步到云端
+
+小红书 / 大麦这类困难源可以继续放在本机，用 Chrome / Computer Use / 人工接管获取信息。只要最终产出标准化事件 JSON，就可以同步到云端统一入库：
+
+```bash
+SHOW_TRACE_API_BASE_URL=http://<server-ip> \
+API_TOKEN=<cloud-api-token> \
+./venv/bin/python scripts/sync_local_events.py data/fixtures/local_import_events.json
+```
+
+JSON 可以是事件数组，也可以是：
+
+```json
+{
+  "trigger": "local-computer-use",
+  "notify": false,
+  "events": [
+    {
+      "type": "concert",
+      "title": "示例演出",
+      "artist": "周杰伦",
+      "city": "上海",
+      "venue": "示例场馆",
+      "event_date": "2026-08-08",
+      "source": "local-computer-use",
+      "discovered_via": "本机 Chrome / Computer Use"
+    }
+  ]
+}
+```
+
+导入接口会复用 `events.id` 去重逻辑：同一事件重复上传会更新易变字段，不会重复入库。
 
 ## 自动化（launchd 每天 10:00 跑）
 
@@ -136,6 +170,8 @@ app/
   api.py                FastAPI：事件 / 摘要 / 订阅 / 运行记录 API
   database.py           API 只读查询 helper
   pipeline.py           编排：订阅 → 抓取 → LLM 抽取 → 入库去重 → 通知 / 运行记录
+scripts/
+  sync_local_events.py  本机困难源结构化事件同步到云端
 config.yaml             首次初始化订阅用的艺人 / 城市 / 启用源配置
 .env                    DeepSeek API key（gitignore）
 db.py                   SQLite schema + upsert / 订阅 / 运行记录

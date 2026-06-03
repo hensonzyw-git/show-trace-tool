@@ -3,21 +3,32 @@
 from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from dotenv import load_dotenv
 
 from app.auth import require_api_token
 from app.database import count_events, database_exists, list_events, read_digest
 from app.paths import ROOT
 from app.pipeline import bootstrap_subscription, run_pipeline
-from db import list_runs, save_subscription
+from db import (
+    create_run,
+    finish_run,
+    get_unnotified_events,
+    list_runs,
+    mark_notified,
+    save_subscription,
+    upsert_event,
+)
+from notifiers.feishu import FeishuNotifier
+from notifiers.feishu_app import FeishuAppNotifier
+from notifiers.markdown import MarkdownNotifier
 
 load_dotenv(ROOT / ".env")
 
 app = FastAPI(
     title="Show Trace Tool API",
     description="API for daily performance digests, subscriptions, and worker runs.",
-    version="0.3.0",
+    version="0.4.0",
 )
 
 
@@ -35,6 +46,37 @@ class SubscriptionPayload(BaseModel):
 class RunRequest(BaseModel):
     fixture: bool = False
     notify: bool = True
+
+
+class ImportEvent(BaseModel):
+    type: Literal["concert", "exhibition", "activity"]
+    title: str
+    artist: str | None = None
+    city: str | None = None
+    venue: str | None = None
+    event_date: str | None = None
+    on_sale_time: str | None = None
+    price_info: str | None = None
+    purchase_url: str | None = None
+    source: str
+    source_url: str | None = None
+    raw_ref: str | None = None
+    discovered_via: str | None = None
+    status: str = "rumored"
+
+    @field_validator("title", "source")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("must not be blank")
+        return value
+
+
+class ImportEventsRequest(BaseModel):
+    events: list[ImportEvent] = Field(default_factory=list, max_length=500)
+    notify: bool = False
+    trigger: str = "local-sync"
 
 
 @app.get("/health")
@@ -102,6 +144,78 @@ def create_manual_run(
         notify=payload.notify,
         trigger="api",
     )
+
+
+@app.post("/api/events/import")
+def import_events(
+    payload: ImportEventsRequest,
+    _: None = Depends(require_api_token),
+) -> dict[str, Any]:
+    """Import structured events from local assisted/browser sources."""
+    if not payload.events:
+        raise HTTPException(status_code=400, detail="events must not be empty")
+
+    run_id = create_run(trigger=payload.trigger, fixture=False, notify=payload.notify)
+    imported: list[dict[str, Any]] = []
+    new_events = 0
+    errors: list[str] = []
+    notified_events = 0
+
+    try:
+        for item in payload.events:
+            event = item.model_dump()
+            event_id, is_new = upsert_event(event)
+            if is_new:
+                new_events += 1
+            imported.append(
+                {
+                    "id": event_id,
+                    "is_new": is_new,
+                    "title": event["title"],
+                    "source": event["source"],
+                }
+            )
+
+        if payload.notify:
+            try:
+                unnotified = get_unnotified_events()
+                for notifier in (
+                    MarkdownNotifier(),
+                    FeishuNotifier(),
+                    FeishuAppNotifier(),
+                ):
+                    notifier.notify(unnotified)
+                mark_notified([event["id"] for event in unnotified])
+                notified_events = len(unnotified)
+            except Exception as e:
+                errors.append(f"notify: {e}")
+    except Exception as e:
+        errors.append(f"import: {e}")
+
+    status = "partial_success" if errors and imported else "failed" if errors else "success"
+    finish_run(
+        run_id,
+        status=status,
+        total_raw_captures=0,
+        total_extracted_events=len(payload.events),
+        new_events=new_events,
+        notified_events=notified_events,
+        error_summary="\n".join(errors) if errors else None,
+    )
+    if errors and not imported:
+        raise HTTPException(status_code=500, detail=errors)
+
+    return {
+        "run_id": run_id,
+        "status": status,
+        "total_events": len(payload.events),
+        "imported_events": len(imported),
+        "new_events": new_events,
+        "updated_events": len(imported) - new_events,
+        "notified_events": notified_events,
+        "errors": errors,
+        "items": imported,
+    }
 
 
 @app.get("/api/runs")

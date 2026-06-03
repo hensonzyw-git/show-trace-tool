@@ -1,0 +1,38 @@
+{
+  "trigger": "local-computer-use-fixture",
+  "notify": false,
+  "events": [
+    {
+      "type": "concert",
+      "title": "本机辅助抓取测试演出",
+      "artist": "周杰伦",
+      "city": "上海",
+      "venue": "本机同步测试场馆",
+      "event_date": "2026-08-08",
+      "on_sale_time": "待确认",
+      "price_info": "待确认",
+      "purchase_url": "https://example.com/local-assisted-show",
+      "source": "local-computer-use",
+      "source_url": "https://example.com",
+      "raw_ref": "local://computer-use/fixture",
+      "discovered_via": "本机 Computer Use 测试导入",
+      "status": "rumored"
+    },
+    {
+      "type": "exhibition",
+      "title": "本机辅助抓取测试展览",
+      "artist": null,
+      "city": "上海",
+      "venue": "本机同步测试展馆",
+      "event_date": "2026-09-01 ~ 2026-09-30",
+      "on_sale_time": null,
+      "price_info": "99 元起",
+      "purchase_url": "https://example.com/local-assisted-exhibition",
+      "source": "local-computer-use",
+      "source_url": "https://example.com",
+      "raw_ref": "local://computer-use/fixture",
+      "discovered_via": "本机 Computer Use 测试导入",
+      "status": "rumored"
+    }
+  ]
+}

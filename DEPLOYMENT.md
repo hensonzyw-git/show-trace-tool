@@ -414,7 +414,38 @@ crontab -e
 
 ---
 
-## 6. 官方文档依据
+## 6. 本机困难源同步到云端
+
+云端 ECS 负责稳定源每日抓取。本机 Mac 负责困难源辅助抓取：
+
+- 小红书：用 Chrome / Computer Use / 插件能力搜索和读取。
+- 大麦：保留本机 Chrome profile、登录态和人工接管能力。
+- 其他反爬失败的平台：先在本机完成信息获取。
+
+本机脚本最终只需要产出标准事件 JSON，然后调用云端导入接口：
+
+```bash
+SHOW_TRACE_API_BASE_URL=http://<server-ip> \
+API_TOKEN=<cloud-api-token> \
+./venv/bin/python scripts/sync_local_events.py data/fixtures/local_import_events.json
+```
+
+云端接口：
+
+```text
+POST /api/events/import
+```
+
+行为：
+
+- 使用同一套 `events.id` 去重规则。
+- 新事件插入，重复事件只更新票价、开票时间、购买链接等易变字段。
+- 写入 `runs` 表，方便追踪是云端自动采集还是本机同步。
+- 默认 `notify=false`，需要导入后立即生成摘要 / 推送时再显式开启。
+
+---
+
+## 7. 官方文档依据
 
 - [Render FastAPI 部署](https://render.com/docs/deploy-fastapi)：Web service 启动命令需要绑定 `0.0.0.0:$PORT`。
 - [Render Cron Jobs](https://render.com/docs/cronjobs)：cron job 可定时运行命令，但不能挂载持久磁盘。
