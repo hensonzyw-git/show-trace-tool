@@ -9,21 +9,27 @@ from dotenv import load_dotenv
 from app.auth import require_api_token
 from app.database import count_events, database_exists, list_events, read_digest
 from app.paths import ROOT
+load_dotenv(ROOT / ".env")
+
 from app.pipeline import bootstrap_subscription, run_pipeline
+from app.preferences import (
+    get_current_interest_profile,
+    parse_preference_feedback,
+    score_events_for_interest,
+)
 from db import (
     create_run,
     finish_run,
     get_unnotified_events,
     list_runs,
     mark_notified,
+    save_event_interest_score,
     save_subscription,
     upsert_event,
 )
 from notifiers.feishu import FeishuNotifier
 from notifiers.feishu_app import FeishuAppNotifier
 from notifiers.markdown import MarkdownNotifier
-
-load_dotenv(ROOT / ".env")
 
 app = FastAPI(
     title="Show Trace Tool API",
@@ -79,6 +85,13 @@ class ImportEventsRequest(BaseModel):
     trigger: str = "local-sync"
 
 
+class PreferenceFeedbackRequest(BaseModel):
+    feedback: str = Field(min_length=1, max_length=2000)
+    event_id: str | None = None
+    rescore_existing: bool = True
+    rescore_limit: int = Field(default=500, ge=0, le=500)
+
+
 @app.get("/health")
 def health() -> dict[str, Any]:
     return {
@@ -93,6 +106,7 @@ def get_events(
     city: str | None = None,
     type: Literal["concert", "exhibition", "activity"] | None = None,
     source: str | None = None,
+    interest_decision: Literal["keep", "maybe", "filter"] | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     limit: int = Query(default=100, ge=1, le=500),
@@ -102,6 +116,7 @@ def get_events(
         "city": city,
         "event_type": type,
         "source": source,
+        "interest_decision": interest_decision,
         "date_from": date_from,
         "date_to": date_to,
     }
@@ -134,6 +149,39 @@ def update_default_subscription(
     return save_subscription(payload.model_dump())
 
 
+@app.get("/api/preferences")
+def get_preferences(_: None = Depends(require_api_token)) -> dict[str, Any]:
+    return get_current_interest_profile()
+
+
+@app.post("/api/preferences/feedback")
+def update_preferences_from_feedback(
+    payload: PreferenceFeedbackRequest,
+    _: None = Depends(require_api_token),
+) -> dict[str, Any]:
+    result = parse_preference_feedback(payload.feedback)
+    result["event_id"] = payload.event_id
+    result["rescored_events"] = _rescore_existing_events(
+        limit=payload.rescore_limit,
+        enabled=payload.rescore_existing,
+    )
+    return result
+
+
+def _rescore_existing_events(*, limit: int, enabled: bool) -> int:
+    if not enabled or limit <= 0:
+        return 0
+
+    from db import get_events_for_interest_scoring
+
+    profile = get_current_interest_profile()
+    events = get_events_for_interest_scoring(limit=limit)
+    scores = score_events_for_interest(events, profile)
+    for event, score in zip(events, scores, strict=True):
+        save_event_interest_score(event["id"], score)
+    return len(events)
+
+
 @app.post("/api/runs")
 def create_manual_run(
     payload: RunRequest,
@@ -162,9 +210,12 @@ def import_events(
     notified_events = 0
 
     try:
-        for item in payload.events:
-            event = item.model_dump()
+        interest_profile = get_current_interest_profile()
+        event_payloads = [item.model_dump() for item in payload.events]
+        interest_scores = score_events_for_interest(event_payloads, interest_profile)
+        for event, interest_score in zip(event_payloads, interest_scores, strict=True):
             event_id, is_new = upsert_event(event)
+            save_event_interest_score(event_id, interest_score)
             if is_new:
                 new_events += 1
             imported.append(
@@ -173,6 +224,7 @@ def import_events(
                     "is_new": is_new,
                     "title": event["title"],
                     "source": event["source"],
+                    "interest_score": interest_score,
                 }
             )
 

@@ -33,9 +33,11 @@
 
 打开：
 - `http://127.0.0.1:8000/health` —— 健康检查
-- `http://127.0.0.1:8000/api/events` —— 事件列表
+- `http://127.0.0.1:8000/api/events` —— 事件列表，支持 `interest_decision=keep|maybe|filter`
 - `http://127.0.0.1:8000/api/digests/today` —— 今日 Markdown 摘要
 - `http://127.0.0.1:8000/api/subscriptions` —— 当前订阅配置（GET / PUT）
+- `http://127.0.0.1:8000/api/preferences` —— 当前喜好画像（GET）
+- `http://127.0.0.1:8000/api/preferences/feedback` —— 自然语言喜好反馈（POST）
 - `http://127.0.0.1:8000/api/events/import` —— 本机困难源结构化事件导入（POST）
 - `http://127.0.0.1:8000/api/runs` —— 最近运行记录（GET）或手动触发一次（POST）
 - `http://127.0.0.1:8000/docs` —— OpenAPI 文档
@@ -53,6 +55,28 @@ curl -X POST http://127.0.0.1:8000/api/runs \
   -H 'Content-Type: application/json' \
   -d '{"fixture": true, "notify": false}'
 ```
+
+iOS 推荐列表可以直接请求：
+
+```bash
+curl 'http://127.0.0.1:8000/api/events?interest_decision=keep&limit=50' \
+  -H 'Authorization: Bearer <token>'
+```
+
+自然语言修改喜好：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/preferences/feedback \
+  -H 'Authorization: Bearer <token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "feedback": "篮球先不要，爵士现场多推荐",
+    "rescore_existing": true,
+    "rescore_limit": 500
+  }'
+```
+
+返回里的 `rescored_events` 表示本次已按新喜好重新打分的历史活动数量。
 
 ## 本机困难源同步到云端
 
@@ -86,6 +110,12 @@ JSON 可以是事件数组，也可以是：
 ```
 
 导入接口会复用 `events.id` 去重逻辑：同一事件重复上传会更新易变字段，不会重复入库。
+
+如果调整了自然语言喜好，可以重新给历史活动补评分：
+
+```bash
+./venv/bin/python scripts/backfill_interest_scores.py
+```
 
 ## 本机辅助采集
 
@@ -129,6 +159,10 @@ sources:           # 启用的抓取源
 
 ```
 DEEPSEEK_API_KEY=sk-xxx
+
+# 可选：偏好解析 / 推荐评分默认也复用 DeepSeek
+SHOW_TRACE_PREFERENCES_LLM=1
+SHOW_TRACE_PREFERENCES_MODEL=deepseek-chat
 
 # 可选：飞书 webhook，配了就推 Top 5 到飞书群（手机也收到）
 FEISHU_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/xxx

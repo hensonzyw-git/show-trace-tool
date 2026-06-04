@@ -11,6 +11,7 @@ from typing import Any
 import sqlite3
 
 from app.paths import DB_PATH, DIGEST_DIR, ROOT
+from db import init_db
 
 
 @contextmanager
@@ -32,12 +33,14 @@ def list_events(
     city: str | None = None,
     event_type: str | None = None,
     source: str | None = None,
+    interest_decision: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
     """Return events with lightweight filters for the first API milestone."""
+    init_db()
     if not database_exists():
         return []
 
@@ -53,6 +56,9 @@ def list_events(
     if source:
         where.append("source = ?")
         params.append(source)
+    if interest_decision:
+        where.append("scores.decision = ?")
+        params.append(interest_decision)
     if date_from:
         where.append("event_date >= ?")
         params.append(date_from)
@@ -66,10 +72,19 @@ def list_events(
     with _conn() as c:
         rows = c.execute(
             f"""
-            SELECT *
+            SELECT
+                events.*,
+                scores.decision AS interest_decision,
+                scores.match_score AS interest_match_score,
+                scores.interest_category AS interest_category,
+                scores.reason AS interest_reason,
+                scores.uncertainty AS interest_uncertainty,
+                scores.scored_at AS interest_scored_at
             FROM events
+            LEFT JOIN event_interest_scores AS scores
+                ON scores.event_id = events.id
             {clause}
-            ORDER BY event_date IS NULL, event_date ASC, first_seen DESC
+            ORDER BY events.event_date IS NULL, events.event_date ASC, events.first_seen DESC
             LIMIT ? OFFSET ?
             """,
             params,
@@ -82,6 +97,7 @@ def count_events(
     city: str | None = None,
     event_type: str | None = None,
     source: str | None = None,
+    interest_decision: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
 ) -> int:
@@ -99,6 +115,9 @@ def count_events(
     if source:
         where.append("source = ?")
         params.append(source)
+    if interest_decision:
+        where.append("scores.decision = ?")
+        params.append(interest_decision)
     if date_from:
         where.append("event_date >= ?")
         params.append(date_from)
@@ -108,7 +127,16 @@ def count_events(
 
     clause = f"WHERE {' AND '.join(where)}" if where else ""
     with _conn() as c:
-        row = c.execute(f"SELECT COUNT(*) AS count FROM events {clause}", params).fetchone()
+        row = c.execute(
+            f"""
+            SELECT COUNT(*) AS count
+            FROM events
+            LEFT JOIN event_interest_scores AS scores
+                ON scores.event_id = events.id
+            {clause}
+            """,
+            params,
+        ).fetchone()
     return int(row["count"] if row else 0)
 
 

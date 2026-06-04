@@ -22,6 +22,7 @@ from db import (
     get_unnotified_events,
     init_db,
     mark_notified,
+    save_event_interest_score,
     upsert_event,
 )
 from extractor import extract_events
@@ -33,6 +34,7 @@ from sources.damai import DamaiSource
 from sources.motianlun import MotianlunSource
 from sources.showstart import ShowstartSource
 from app.paths import CONFIG_PATH, FIXTURE_DIR, RAW_DIR, ROOT
+from app.preferences import get_current_interest_profile, score_events_for_interest
 
 SOURCE_REGISTRY: dict[str, type] = {
     "damai": DamaiSource,
@@ -205,8 +207,11 @@ def _run_pipeline_body(
             all_events.extend(events)
             total_fetch_count += 1
 
-    for event in all_events:
+    interest_profile = get_current_interest_profile()
+    interest_scores = score_events_for_interest(all_events, interest_profile)
+    for event, interest_score in zip(all_events, interest_scores, strict=True):
         event_id, is_new = upsert_event(event)
+        save_event_interest_score(event_id, interest_score)
         if is_new:
             stats.new_events += 1
             stats.new_event_ids.append(event_id)

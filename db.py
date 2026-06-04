@@ -11,6 +11,7 @@
 
 import hashlib
 import json
+import re
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
@@ -75,9 +76,43 @@ CREATE TABLE IF NOT EXISTS runs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_runs_started_at ON runs(started_at);
+
+CREATE TABLE IF NOT EXISTS interest_profiles (
+    id              TEXT PRIMARY KEY,
+    profile_json    TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS event_interest_scores (
+    event_id          TEXT PRIMARY KEY,
+    profile_id        TEXT NOT NULL,
+    decision          TEXT NOT NULL,
+    match_score       INTEGER NOT NULL,
+    interest_category TEXT,
+    reason            TEXT,
+    uncertainty       TEXT,
+    scored_at         TEXT NOT NULL,
+    FOREIGN KEY(event_id) REFERENCES events(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_interest_scores_decision
+ON event_interest_scores(decision, match_score);
 """
 
 DEFAULT_SUBSCRIPTION_ID = "default"
+DEFAULT_INTEREST_PROFILE_ID = "default"
+DEFAULT_INTEREST_PROFILE = {
+    "city": "上海",
+    "include_categories": ["体育比赛", "演唱会", "音乐会", "话剧"],
+    "exclude_categories": ["曲艺杂谈", "亲子", "儿童剧"],
+    "ranking_preferences": ["未来三个月优先", "可购票优先", "上海优先"],
+    "negative_signals": [],
+    "positive_signals": [],
+}
+DATE_PATTERN = re.compile(r"(\d{4})[-./年](\d{1,2})[-./月](\d{1,2})")
+DATE_RANGE_TAIL_PATTERN = re.compile(
+    r"\s*(?:-|~|至|到)\s*(?:(\d{4})[-./年])?(\d{1,2})[-./月](\d{1,2})"
+)
 
 
 def make_event_id(event: dict) -> str:
@@ -93,6 +128,42 @@ def make_event_id(event: dict) -> str:
     ]
     plain = "|".join(key_parts)
     return hashlib.sha256(plain.encode("utf-8")).hexdigest()[:16]
+
+
+def normalize_event_date(value: Any) -> str | None:
+    """Normalize common ticket-site date text into YYYY-MM-DD or a date range."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+
+    match = DATE_PATTERN.search(text)
+    if not match:
+        return text
+
+    year, month, day = (int(part) for part in match.groups())
+    start = f"{year:04d}-{month:02d}-{day:02d}"
+
+    tail = text[match.end() :]
+    range_match = DATE_RANGE_TAIL_PATTERN.search(tail)
+    if not range_match:
+        return start
+
+    end_year_text, end_month_text, end_day_text = range_match.groups()
+    end_month = int(end_month_text)
+    end_day = int(end_day_text)
+    end_year = int(end_year_text) if end_year_text else year
+    if not end_year_text and end_month < month:
+        end_year += 1
+    end = f"{end_year:04d}-{end_month:02d}-{end_day:02d}"
+    return f"{start} ~ {end}"
+
+
+def normalize_event(event: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(event)
+    normalized["event_date"] = normalize_event_date(normalized.get("event_date"))
+    return normalized
 
 
 @contextmanager
@@ -204,12 +275,113 @@ def save_subscription(subscription: dict[str, Any]) -> dict[str, Any]:
     return saved
 
 
+def get_interest_profile(profile_id: str = DEFAULT_INTEREST_PROFILE_ID) -> dict[str, Any] | None:
+    init_db()
+    with _conn() as c:
+        row = c.execute(
+            "SELECT * FROM interest_profiles WHERE id = ?",
+            (profile_id,),
+        ).fetchone()
+    if not row:
+        return None
+    profile = json.loads(row["profile_json"])
+    profile["id"] = row["id"]
+    profile["updated_at"] = row["updated_at"]
+    return profile
+
+
+def save_interest_profile(
+    profile: dict[str, Any],
+    profile_id: str = DEFAULT_INTEREST_PROFILE_ID,
+) -> dict[str, Any]:
+    init_db()
+    normalized = {
+        **DEFAULT_INTEREST_PROFILE,
+        **{k: v for k, v in profile.items() if k not in {"id", "updated_at"}},
+    }
+    now = datetime.now().isoformat(timespec="seconds")
+    with _conn() as c:
+        c.execute(
+            """
+            INSERT INTO interest_profiles (id, profile_json, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                profile_json = excluded.profile_json,
+                updated_at = excluded.updated_at
+            """,
+            (
+                profile_id,
+                json.dumps(normalized, ensure_ascii=False),
+                now,
+            ),
+        )
+    saved = get_interest_profile(profile_id)
+    if saved is None:
+        raise RuntimeError("interest profile save failed")
+    return saved
+
+
+def ensure_interest_profile() -> dict[str, Any]:
+    current = get_interest_profile()
+    if current:
+        return current
+    return save_interest_profile(DEFAULT_INTEREST_PROFILE)
+
+
+def save_event_interest_score(
+    event_id: str,
+    score: dict[str, Any],
+    profile_id: str = DEFAULT_INTEREST_PROFILE_ID,
+) -> dict[str, Any]:
+    init_db()
+    now = datetime.now().isoformat(timespec="seconds")
+    normalized = {
+        "event_id": event_id,
+        "profile_id": profile_id,
+        "decision": score.get("decision") or "maybe",
+        "match_score": int(score.get("match_score") or 0),
+        "interest_category": score.get("interest_category"),
+        "reason": score.get("reason"),
+        "uncertainty": score.get("uncertainty") or "medium",
+        "scored_at": now,
+    }
+    with _conn() as c:
+        c.execute(
+            """
+            INSERT INTO event_interest_scores
+            (event_id, profile_id, decision, match_score, interest_category,
+             reason, uncertainty, scored_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(event_id) DO UPDATE SET
+                profile_id = excluded.profile_id,
+                decision = excluded.decision,
+                match_score = excluded.match_score,
+                interest_category = excluded.interest_category,
+                reason = excluded.reason,
+                uncertainty = excluded.uncertainty,
+                scored_at = excluded.scored_at
+            """,
+            (
+                normalized["event_id"],
+                normalized["profile_id"],
+                normalized["decision"],
+                normalized["match_score"],
+                normalized["interest_category"],
+                normalized["reason"],
+                normalized["uncertainty"],
+                normalized["scored_at"],
+            ),
+        )
+    return normalized
+
+
 def upsert_event(event: dict[str, Any]) -> tuple[str, bool]:
     """插入 event，返回 (event_id, is_new)。
 
     已存在则只更新易变字段（price_info、on_sale_time、purchase_url、status），
     不动 first_seen 和 notified_at。
     """
+    event = normalize_event(event)
     event_id = make_event_id(event)
     now = datetime.now().isoformat(timespec="seconds")
     with _conn() as c:
@@ -283,6 +455,46 @@ def get_events_by_ids(event_ids: list[str]) -> list[dict[str, Any]]:
             event_ids,
         ).fetchall()
     return sorted([dict(r) for r in rows], key=lambda event: ordering.get(event["id"], 0))
+
+
+def get_events_missing_interest_scores(
+    *,
+    profile_id: str = DEFAULT_INTEREST_PROFILE_ID,
+    limit: int = 500,
+) -> list[dict[str, Any]]:
+    """Return events that do not have an interest score for the profile yet."""
+    init_db()
+    with _conn() as c:
+        rows = c.execute(
+            """
+            SELECT events.*
+            FROM events
+            LEFT JOIN event_interest_scores scores
+                ON scores.event_id = events.id
+                AND scores.profile_id = ?
+            WHERE scores.event_id IS NULL
+            ORDER BY events.event_date IS NULL, events.event_date ASC, events.first_seen DESC
+            LIMIT ?
+            """,
+            (profile_id, limit),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_events_for_interest_scoring(*, limit: int = 500) -> list[dict[str, Any]]:
+    """Return existing events in the same order used by the public list API."""
+    init_db()
+    with _conn() as c:
+        rows = c.execute(
+            """
+            SELECT *
+            FROM events
+            ORDER BY event_date IS NULL, event_date ASC, first_seen DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def mark_notified(event_ids: list[str]) -> None:
