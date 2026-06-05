@@ -7,6 +7,7 @@ breaking the existing launchd entrypoint.
 
 import os
 import random
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -30,17 +31,30 @@ from notifiers.feishu import FeishuNotifier
 from notifiers.feishu_app import FeishuAppNotifier
 from notifiers.macos import MacosNotifier
 from notifiers.markdown import MarkdownNotifier
-from sources.damai import DamaiSource
 from sources.motianlun import MotianlunSource
 from sources.showstart import ShowstartSource
+
+# Damai needs patchright + a real Chrome; the cloud image does not install it
+# (config.cloud.yaml keeps damai disabled). Import lazily so the API still boots
+# when the browser stack is absent.
+try:
+    from sources.damai import DamaiSource
+except ImportError:  # pragma: no cover - depends on optional browser deps
+    DamaiSource = None
 from app.paths import CONFIG_PATH, FIXTURE_DIR, RAW_DIR, ROOT
 from app.preferences import get_current_interest_profile, score_events_for_interest
 
 SOURCE_REGISTRY: dict[str, type] = {
-    "damai": DamaiSource,
     "showstart": ShowstartSource,
     "motianlun": MotianlunSource,
 }
+if DamaiSource is not None:
+    SOURCE_REGISTRY["damai"] = DamaiSource
+
+# Cron-triggered runs and manual POST /api/runs both land in the same web
+# process, so an in-process non-blocking lock is enough to stop two pipeline
+# passes from clobbering each other (duplicate fetches / double notifications).
+_run_lock = threading.Lock()
 
 
 @dataclass
@@ -90,6 +104,9 @@ def _init_sources(sources_cfg: dict[str, Any]) -> list[Any]:
 def init_profile_from_subscription() -> None:
     """Open GUI Chrome for Damai profile seeding, preserving the old CLI flow."""
     load_dotenv(ROOT / ".env")
+    if DamaiSource is None:
+        print("--init-profile 需要浏览器依赖（patchright），当前环境未安装。")
+        return
     subscription = bootstrap_subscription()
     sources = _init_sources(subscription.get("sources") or {})
     damai = next((s for s in sources if isinstance(s, DamaiSource)), None)
@@ -112,43 +129,63 @@ def run_pipeline(
     trigger: str = "cli",
     record_run: bool = True,
 ) -> dict[str, Any]:
-    """Run one full collection pass and optionally persist a run record."""
-    load_dotenv(ROOT / ".env")
-    init_db()
-    subscription = bootstrap_subscription()
-    run_id = create_run(trigger=trigger, fixture=use_fixture, notify=notify) if record_run else None
-    stats = PipelineStats()
+    """Run one full collection pass and optionally persist a run record.
 
+    Guarded by a process-wide lock: if a run is already in progress, this
+    returns immediately with status "skipped" instead of starting a second
+    concurrent pass.
+    """
+    if not _run_lock.acquire(blocking=False):
+        print("[pipeline] 已有采集在进行中，跳过本次触发")
+        return {
+            "run_id": None,
+            "status": "skipped",
+            "total_raw_captures": 0,
+            "total_extracted_events": 0,
+            "new_events": 0,
+            "new_event_ids": [],
+            "notified_events": 0,
+            "errors": ["another run is already in progress"],
+        }
     try:
-        _run_pipeline_body(subscription, use_fixture=use_fixture, notify=notify, stats=stats)
-    except Exception as e:
-        stats.errors.append(f"pipeline: {e}")
-        print(f"[pipeline] 失败: {e}")
-    finally:
-        if run_id is not None:
-            finish_run(
-                run_id,
-                status=stats.status,
-                total_raw_captures=stats.total_raw_captures,
-                total_extracted_events=stats.total_extracted_events,
-                new_events=stats.new_events,
-                notified_events=stats.notified_events,
-                error_summary="\n".join(stats.errors) if stats.errors else None,
-            )
+        load_dotenv(ROOT / ".env")
+        init_db()
+        subscription = bootstrap_subscription()
+        run_id = create_run(trigger=trigger, fixture=use_fixture, notify=notify) if record_run else None
+        stats = PipelineStats()
 
-    result = {
-        "run_id": run_id,
-        "status": stats.status,
-        "total_raw_captures": stats.total_raw_captures,
-        "total_extracted_events": stats.total_extracted_events,
-        "new_events": stats.new_events,
-        "new_event_ids": stats.new_event_ids,
-        "notified_events": stats.notified_events,
-        "errors": stats.errors,
-    }
-    if run_id is not None:
-        result["id"] = run_id
-    return result
+        try:
+            _run_pipeline_body(subscription, use_fixture=use_fixture, notify=notify, stats=stats)
+        except Exception as e:
+            stats.errors.append(f"pipeline: {e}")
+            print(f"[pipeline] 失败: {e}")
+        finally:
+            if run_id is not None:
+                finish_run(
+                    run_id,
+                    status=stats.status,
+                    total_raw_captures=stats.total_raw_captures,
+                    total_extracted_events=stats.total_extracted_events,
+                    new_events=stats.new_events,
+                    notified_events=stats.notified_events,
+                    error_summary="\n".join(stats.errors) if stats.errors else None,
+                )
+
+        result = {
+            "run_id": run_id,
+            "status": stats.status,
+            "total_raw_captures": stats.total_raw_captures,
+            "total_extracted_events": stats.total_extracted_events,
+            "new_events": stats.new_events,
+            "new_event_ids": stats.new_event_ids,
+            "notified_events": stats.notified_events,
+            "errors": stats.errors,
+        }
+        if run_id is not None:
+            result["id"] = run_id
+        return result
+    finally:
+        _run_lock.release()
 
 
 def _run_pipeline_body(
@@ -207,14 +244,25 @@ def _run_pipeline_body(
             all_events.extend(events)
             total_fetch_count += 1
 
-    interest_profile = get_current_interest_profile()
-    interest_scores = score_events_for_interest(all_events, interest_profile)
-    for event, interest_score in zip(all_events, interest_scores, strict=True):
+    # Upsert first, then score only the events that are genuinely new this run.
+    # Duplicate dicts across tasks collapse to the same id (is_new=False on the
+    # second hit), so each new event is scored exactly once — and we avoid
+    # re-spending LLM tokens re-scoring events already in the DB. Profile-change
+    # rescoring is handled separately by /preferences/feedback and the backfill
+    # script.
+    new_to_score: list[tuple[str, dict[str, Any]]] = []
+    for event in all_events:
         event_id, is_new = upsert_event(event)
-        save_event_interest_score(event_id, interest_score)
         if is_new:
             stats.new_events += 1
             stats.new_event_ids.append(event_id)
+            new_to_score.append((event_id, event))
+
+    if new_to_score:
+        interest_profile = get_current_interest_profile()
+        scores = score_events_for_interest([e for _, e in new_to_score], interest_profile)
+        for (event_id, _), interest_score in zip(new_to_score, scores, strict=True):
+            save_event_interest_score(event_id, interest_score)
     print(
         f"\n=== 入库: {len(all_events)} 条抽取结果中 "
         f"{stats.new_events} 条是新事件 ==="

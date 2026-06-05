@@ -18,13 +18,12 @@ flow:
 
 import json
 import os
-from datetime import datetime
 
 import requests
 
 from notifiers.base import Notifier
+from notifiers.feishu_card import build_card
 
-TOP_N = 5
 TOKEN_URL = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
 SEND_MESSAGE_URL = "https://open.feishu.cn/open-apis/im/v1/messages"
 
@@ -60,53 +59,8 @@ class FeishuAppNotifier(Notifier):
             return
         token = data["tenant_access_token"]
 
-        # 2. 构造 markdown card（跟 FeishuNotifier webhook 版同形）
-        from notifiers.markdown import MarkdownNotifier
-
-        today = datetime.now().strftime("%Y-%m-%d")
-        upcoming = sorted(
-            [
-                e for e in events
-                if MarkdownNotifier._date_key(e.get("event_date")) >= today
-            ],
-            key=lambda e: MarkdownNotifier._date_key(e.get("event_date")),
-        )[:TOP_N]
-
-        lines: list[str] = [
-            f"共 **{len(events)}** 条新事件（含已过期，仅展示最近 {len(upcoming)} 条）",
-            "",
-        ]
-        for i, e in enumerate(upcoming, 1):
-            title = (e.get("title") or "?").strip()[:60]
-            lines.append(f"**{i}. {title}**")
-            if e.get("artist"):
-                lines.append(f"艺人：{e['artist']}")
-            loc = " / ".join(filter(None, [e.get("city"), e.get("venue")]))
-            if loc:
-                lines.append(f"📍 {loc}")
-            if e.get("event_date"):
-                lines.append(f"📅 {e['event_date']}")
-            if e.get("price_info"):
-                lines.append(f"💰 {e['price_info']}")
-            if e.get("discovered_via"):
-                lines.append(f"🔍 {e['discovered_via']}")
-            if e.get("purchase_url"):
-                lines.append(f"[→ 详情链接]({e['purchase_url']})")
-            lines.append("")
-        lines.append("---")
-        lines.append(f"完整 digest 见本地 `data/digests/digest_{today}.md`")
-
-        card = {
-            "config": {"wide_screen_mode": True},
-            "header": {
-                "title": {
-                    "tag": "plain_text",
-                    "content": f"📣 演出活动监控 - {today}",
-                },
-                "template": "blue",
-            },
-            "elements": [{"tag": "markdown", "content": "\n".join(lines)}],
-        }
+        # 2. 构造 markdown card（跟 FeishuNotifier webhook 版共用 build_card）
+        card, upcoming = build_card(events)
 
         # 3. 调 im/v1/messages —— content 必须是 JSON-encoded 字符串（不是 dict）
         payload = {

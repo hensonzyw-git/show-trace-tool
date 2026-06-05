@@ -11,6 +11,7 @@ macOS 通知作为"有新东西，去看 digest"的提醒。
 """
 
 import subprocess
+import sys
 
 from notifiers.base import Notifier
 
@@ -19,11 +20,13 @@ class MacosNotifier(Notifier):
     name = "macos"
 
     def notify(self, events: list[dict]) -> None:
+        if sys.platform != "darwin":
+            return  # 非 macOS（如云端 Linux）没有 osascript，静默跳过
         if not events:
             return  # 无新事件不打扰
 
         title = "演出活动监控"
-        subtitle = f"{len(events)} 条新事件"
+        subtitle = f"{len(events)} 条待通知事件"
         # 拿"按日期升序最近一条"作 message，让用户预览本次最有用的事件
         from notifiers.markdown import MarkdownNotifier
 
@@ -46,6 +49,6 @@ class MacosNotifier(Notifier):
             subprocess.run(
                 ["osascript", "-e", script], check=False, timeout=5
             )
-            print(f"[notify/macos] 已弹系统通知（{len(events)} 条新事件）")
+            print(f"[notify/macos] 已弹系统通知（{len(events)} 条待通知事件）")
         except Exception as e:
             print(f"[notify/macos] 发通知失败: {e}")

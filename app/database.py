@@ -11,13 +11,14 @@ from typing import Any
 import sqlite3
 
 from app.paths import DB_PATH, DIGEST_DIR, ROOT
-from db import init_db
+from db import apply_pragmas
 
 
 @contextmanager
 def _conn():
-    c = sqlite3.connect(DB_PATH)
+    c = sqlite3.connect(DB_PATH, timeout=30)
     c.row_factory = sqlite3.Row
+    apply_pragmas(c)
     try:
         yield c
     finally:
@@ -40,7 +41,8 @@ def list_events(
     offset: int = 0,
 ) -> list[dict[str, Any]]:
     """Return events with lightweight filters for the first API milestone."""
-    init_db()
+    # DB schema is created once at app startup (see app.api lifespan), so the
+    # read path no longer triggers a DDL write-lock on every request.
     if not database_exists():
         return []
 

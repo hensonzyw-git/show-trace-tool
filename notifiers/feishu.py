@@ -11,13 +11,11 @@
 """
 
 import os
-from datetime import datetime
 
 import requests
 
 from notifiers.base import Notifier
-
-TOP_N = 5
+from notifiers.feishu_card import build_card
 
 
 class FeishuNotifier(Notifier):
@@ -30,59 +28,8 @@ class FeishuNotifier(Notifier):
         if not events:
             return
 
-        # 复用 MarkdownNotifier 的日期排序逻辑（避免重复实现）
-        from notifiers.markdown import MarkdownNotifier
-
-        today = datetime.now().strftime("%Y-%m-%d")
-        upcoming = sorted(
-            [
-                e for e in events
-                if MarkdownNotifier._date_key(e.get("event_date")) >= today
-            ],
-            key=lambda e: MarkdownNotifier._date_key(e.get("event_date")),
-        )[:TOP_N]
-
-        # 主体 markdown
-        lines: list[str] = [
-            f"共 **{len(events)}** 条新事件（含已过期，仅展示最近 {len(upcoming)} 条）",
-            "",
-        ]
-        for i, e in enumerate(upcoming, 1):
-            title = (e.get("title") or "?").strip()[:60]
-            lines.append(f"**{i}. {title}**")
-            if e.get("artist"):
-                lines.append(f"艺人：{e['artist']}")
-            loc = " / ".join(filter(None, [e.get("city"), e.get("venue")]))
-            if loc:
-                lines.append(f"📍 {loc}")
-            if e.get("event_date"):
-                lines.append(f"📅 {e['event_date']}")
-            if e.get("price_info"):
-                lines.append(f"💰 {e['price_info']}")
-            if e.get("discovered_via"):
-                lines.append(f"🔍 {e['discovered_via']}")
-            if e.get("purchase_url"):
-                lines.append(f"[→ 详情链接]({e['purchase_url']})")
-            lines.append("")
-        lines.append("---")
-        lines.append(f"完整 digest 见本地 `data/digests/digest_{today}.md`")
-
-        payload = {
-            "msg_type": "interactive",
-            "card": {
-                "config": {"wide_screen_mode": True},
-                "header": {
-                    "title": {
-                        "tag": "plain_text",
-                        "content": f"📣 演出活动监控 - {today}",
-                    },
-                    "template": "blue",
-                },
-                "elements": [
-                    {"tag": "markdown", "content": "\n".join(lines)},
-                ],
-            },
-        }
+        card, upcoming = build_card(events)
+        payload = {"msg_type": "interactive", "card": card}
 
         try:
             resp = requests.post(webhook, json=payload, timeout=10)

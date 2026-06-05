@@ -166,11 +166,20 @@ def normalize_event(event: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def apply_pragmas(c: sqlite3.Connection) -> None:
+    """WAL + busy_timeout 让 web 进程和 cron 触发的 worker 能并发读写同一个
+    SQLite 文件而不报 'database is locked'。读连接和写连接都应用同一套。"""
+    c.execute("PRAGMA journal_mode=WAL")
+    c.execute("PRAGMA busy_timeout=5000")
+    c.execute("PRAGMA synchronous=NORMAL")
+
+
 @contextmanager
 def _conn():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    c = sqlite3.connect(DB_PATH)
+    c = sqlite3.connect(DB_PATH, timeout=30)
     c.row_factory = sqlite3.Row
+    apply_pragmas(c)
     try:
         yield c
         c.commit()
@@ -373,6 +382,19 @@ def save_event_interest_score(
             ),
         )
     return normalized
+
+
+def get_event_interest_score(
+    event_id: str,
+    profile_id: str = DEFAULT_INTEREST_PROFILE_ID,
+) -> dict[str, Any] | None:
+    """Return the stored interest score for an event, or None if not scored yet."""
+    with _conn() as c:
+        row = c.execute(
+            "SELECT * FROM event_interest_scores WHERE event_id = ? AND profile_id = ?",
+            (event_id, profile_id),
+        ).fetchone()
+    return dict(row) if row else None
 
 
 def upsert_event(event: dict[str, Any]) -> tuple[str, bool]:

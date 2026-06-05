@@ -1,10 +1,12 @@
-requests>=2.31
-beautifulsoup4>=4.12
-lxml>=5.0
-PyYAML>=6.0
-openai>=1.40
-python-dotenv>=1.0
-playwright>=1.40
-patchright>=1.50
-fastapi>=0.110
-uvicorn[standard]>=0.27
+# Core runtime — used by both the cloud web service and the local worker.
+# Pinned for reproducible cloud builds. Browser-backed (Damai) deps live in
+# requirements-local.txt so the cloud image stays slim.
+requests==2.34.2
+beautifulsoup4==4.14.3
+lxml==6.1.0
+PyYAML==6.0.3
+openai==2.36.0
+python-dotenv==1.2.2
+fastapi==0.136.3
+uvicorn[standard]==0.48.0
+pydantic==2.13.4

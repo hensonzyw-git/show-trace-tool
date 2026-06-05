@@ -1,5 +1,6 @@
 """Lightweight bearer-token auth for public cloud deployments."""
 
+import hmac
 import os
 
 from fastapi import Header, HTTPException, status
@@ -16,14 +17,16 @@ def require_api_token(authorization: str | None = Header(default=None)) -> None:
         return
 
     prefix = "Bearer "
-    if not authorization or not authorization.startswith(prefix):
+    token = (
+        authorization.removeprefix(prefix).strip()
+        if authorization and authorization.startswith(prefix)
+        else ""
+    )
+    # Constant-time compare to avoid leaking the token via response timing.
+    # Always return 401 (not 403) so we don't reveal whether the header format
+    # was right vs. the value wrong.
+    if not hmac.compare_digest(token, expected):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing bearer token",
-        )
-    token = authorization.removeprefix(prefix).strip()
-    if token != expected:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid bearer token",
+            detail="Missing or invalid bearer token",
         )

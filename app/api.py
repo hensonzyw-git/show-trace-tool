@@ -1,5 +1,6 @@
 """FastAPI entrypoint for the show trace service API."""
 
+from contextlib import asynccontextmanager
 from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -20,7 +21,9 @@ from app.preferences import (
 from db import (
     create_run,
     finish_run,
+    get_event_interest_score,
     get_unnotified_events,
+    init_db,
     list_runs,
     mark_notified,
     save_event_interest_score,
@@ -31,10 +34,21 @@ from notifiers.feishu import FeishuNotifier
 from notifiers.feishu_app import FeishuAppNotifier
 from notifiers.markdown import MarkdownNotifier
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Create schema + seed the default subscription once at boot, so request
+    # handlers never run DDL on the hot read path (see H1 in CODE_REVIEW.md).
+    init_db()
+    bootstrap_subscription()
+    yield
+
+
 app = FastAPI(
     title="Show Trace Tool API",
     description="API for daily performance digests, subscriptions, and worker runs.",
     version="0.4.0",
+    lifespan=lifespan,
 )
 
 
@@ -210,23 +224,41 @@ def import_events(
     notified_events = 0
 
     try:
-        interest_profile = get_current_interest_profile()
         event_payloads = [item.model_dump() for item in payload.events]
-        interest_scores = score_events_for_interest(event_payloads, interest_profile)
-        for event, interest_score in zip(event_payloads, interest_scores, strict=True):
+
+        # Upsert first; only score events that are new or have no score yet, so
+        # re-importing the same event doesn't re-spend LLM tokens.
+        upserted: list[dict[str, Any]] = []
+        to_score: list[int] = []
+        for event in event_payloads:
             event_id, is_new = upsert_event(event)
-            save_event_interest_score(event_id, interest_score)
             if is_new:
                 new_events += 1
-            imported.append(
-                {
-                    "id": event_id,
-                    "is_new": is_new,
-                    "title": event["title"],
-                    "source": event["source"],
-                    "interest_score": interest_score,
-                }
+            existing_score = None if is_new else get_event_interest_score(event_id)
+            row = {
+                "id": event_id,
+                "is_new": is_new,
+                "title": event["title"],
+                "source": event["source"],
+                "interest_score": existing_score,
+                "_event": event,
+            }
+            if is_new or existing_score is None:
+                to_score.append(len(upserted))
+            upserted.append(row)
+
+        if to_score:
+            interest_profile = get_current_interest_profile()
+            fresh_scores = score_events_for_interest(
+                [upserted[i]["_event"] for i in to_score], interest_profile
             )
+            for i, interest_score in zip(to_score, fresh_scores, strict=True):
+                save_event_interest_score(upserted[i]["id"], interest_score)
+                upserted[i]["interest_score"] = interest_score
+
+        for row in upserted:
+            row.pop("_event", None)
+            imported.append(row)
 
         if payload.notify:
             try:

@@ -35,7 +35,7 @@ class MarkdownNotifier(Notifier):
 
     def notify(self, events: list[dict]) -> None:
         if not events:
-            print("[notify/markdown] 无新事件，不生成摘要")
+            print("[notify/markdown] 无待通知事件，不生成摘要")
             return
 
         DIGEST_DIR.mkdir(parents=True, exist_ok=True)
@@ -45,7 +45,7 @@ class MarkdownNotifier(Notifier):
         lines: list[str] = [
             f"# 演出活动监控摘要 - {today}",
             "",
-            f"共 **{len(events)}** 条新事件。",
+            f"共 **{len(events)}** 条待通知事件。",
             "",
         ]
 

@@ -229,8 +229,13 @@ def _score_event_with_rules(
 ) -> dict[str, Any]:
     category = infer_event_category(event)
     title = event.get("title") or ""
+    exclude_categories = profile.get("exclude_categories") or []
 
-    if _matches_any_category(title, profile.get("exclude_categories") or []):
+    # Symmetric with the include branch below: filter if the inferred category
+    # is excluded OR the title matches an excluded category's aliases. Without
+    # the category check, a type-inferred category (e.g. 亲子) would slip through
+    # whenever the title itself contains no alias word.
+    if category in exclude_categories or _matches_any_category(title, exclude_categories):
         return {
             "decision": "filter",
             "match_score": 15,

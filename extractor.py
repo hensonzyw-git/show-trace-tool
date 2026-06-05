@@ -76,6 +76,11 @@ def html_to_text(html: str, limit: int = 60_000) -> str:
         if full:
             a.append(f" [link: {full}]")
     text = soup.get_text("\n", strip=True)
+    if len(text) > limit:
+        print(
+            f"[extractor] 纯文本 {len(text):,} 字超过 {limit:,} 上限，已截断；"
+            "尾部事件可能丢失（如有需要可调大 limit 或分页抓取）。"
+        )
     return text[:limit]
 
 
@@ -127,6 +132,8 @@ def extract_events(
         print(f"[extractor] LLM 返回的 events 字段不是数组: {type(events).__name__}")
         return []
 
+    # 防御：LLM 偶尔会在数组里塞 null / 字符串，过滤掉非 dict 项再处理。
+    events = [e for e in events if isinstance(e, dict)]
     for e in events:
         e.setdefault("source", source_name)
         if not e.get("source_url"):

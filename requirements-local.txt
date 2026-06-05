@@ -1,0 +1,9 @@
+# Local-only extras for the Damai assisted source (real Chrome via patchright).
+# NOT installed in the cloud image — config.cloud.yaml keeps damai disabled and
+# app.pipeline imports DamaiSource lazily, so the API boots fine without these.
+#
+#   pip install -r requirements-local.txt
+#   patchright install chrome   # one-time browser download
+-r requirements.txt
+playwright==1.59.0
+patchright==1.59.1
