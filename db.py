@@ -10,6 +10,7 @@
 """
 
 import hashlib
+import fcntl
 import json
 import re
 import sqlite3
@@ -17,7 +18,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
 
-from app.paths import DB_PATH
+from app.paths import DATA_DIR, DB_PATH
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (
@@ -172,6 +173,31 @@ def apply_pragmas(c: sqlite3.Connection) -> None:
     c.execute("PRAGMA journal_mode=WAL")
     c.execute("PRAGMA busy_timeout=5000")
     c.execute("PRAGMA synchronous=NORMAL")
+
+
+@contextmanager
+def try_acquire_run_lock():
+    """Non-blocking process lock for collection/import runs.
+
+    FastAPI can run sync endpoints in different threads, and deployment targets
+    may later use multiple worker processes. A file lock gives us one shared
+    mutex on the host; the OS releases it if the process dies.
+    """
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    lock_file = (DATA_DIR / "run.lock").open("a+", encoding="utf-8")
+    acquired = False
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        acquired = True
+    except BlockingIOError:
+        pass
+
+    try:
+        yield acquired
+    finally:
+        if acquired:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+        lock_file.close()
 
 
 @contextmanager

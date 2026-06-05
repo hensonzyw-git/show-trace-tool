@@ -28,6 +28,7 @@ from db import (
     mark_notified,
     save_event_interest_score,
     save_subscription,
+    try_acquire_run_lock,
     upsert_event,
 )
 from notifiers.feishu import FeishuNotifier
@@ -217,89 +218,103 @@ def import_events(
     if not payload.events:
         raise HTTPException(status_code=400, detail="events must not be empty")
 
-    run_id = create_run(trigger=payload.trigger, fixture=False, notify=payload.notify)
-    imported: list[dict[str, Any]] = []
-    new_events = 0
-    errors: list[str] = []
-    notified_events = 0
-
-    try:
-        event_payloads = [item.model_dump() for item in payload.events]
-
-        # Upsert first; only score events that are new or have no score yet, so
-        # re-importing the same event doesn't re-spend LLM tokens.
-        upserted: list[dict[str, Any]] = []
-        to_score: list[int] = []
-        for event in event_payloads:
-            event_id, is_new = upsert_event(event)
-            if is_new:
-                new_events += 1
-            existing_score = None if is_new else get_event_interest_score(event_id)
-            row = {
-                "id": event_id,
-                "is_new": is_new,
-                "title": event["title"],
-                "source": event["source"],
-                "interest_score": existing_score,
-                "_event": event,
+    with try_acquire_run_lock() as acquired:
+        if not acquired:
+            return {
+                "run_id": None,
+                "status": "skipped",
+                "total_events": len(payload.events),
+                "imported_events": 0,
+                "new_events": 0,
+                "updated_events": 0,
+                "notified_events": 0,
+                "errors": ["another run or import is already in progress"],
+                "items": [],
             }
-            if is_new or existing_score is None:
-                to_score.append(len(upserted))
-            upserted.append(row)
 
-        if to_score:
-            interest_profile = get_current_interest_profile()
-            fresh_scores = score_events_for_interest(
-                [upserted[i]["_event"] for i in to_score], interest_profile
-            )
-            for i, interest_score in zip(to_score, fresh_scores, strict=True):
-                save_event_interest_score(upserted[i]["id"], interest_score)
-                upserted[i]["interest_score"] = interest_score
+        run_id = create_run(trigger=payload.trigger, fixture=False, notify=payload.notify)
+        imported: list[dict[str, Any]] = []
+        new_events = 0
+        errors: list[str] = []
+        notified_events = 0
 
-        for row in upserted:
-            row.pop("_event", None)
-            imported.append(row)
+        try:
+            event_payloads = [item.model_dump() for item in payload.events]
 
-        if payload.notify:
-            try:
-                unnotified = get_unnotified_events()
-                for notifier in (
-                    MarkdownNotifier(),
-                    FeishuNotifier(),
-                    FeishuAppNotifier(),
-                ):
-                    notifier.notify(unnotified)
-                mark_notified([event["id"] for event in unnotified])
-                notified_events = len(unnotified)
-            except Exception as e:
-                errors.append(f"notify: {e}")
-    except Exception as e:
-        errors.append(f"import: {e}")
+            # Upsert first; only score events that are new or have no score yet,
+            # so re-importing the same event doesn't re-spend LLM tokens.
+            upserted: list[dict[str, Any]] = []
+            to_score: list[int] = []
+            for event in event_payloads:
+                event_id, is_new = upsert_event(event)
+                if is_new:
+                    new_events += 1
+                existing_score = None if is_new else get_event_interest_score(event_id)
+                row = {
+                    "id": event_id,
+                    "is_new": is_new,
+                    "title": event["title"],
+                    "source": event["source"],
+                    "interest_score": existing_score,
+                    "_event": event,
+                }
+                if is_new or existing_score is None:
+                    to_score.append(len(upserted))
+                upserted.append(row)
 
-    status = "partial_success" if errors and imported else "failed" if errors else "success"
-    finish_run(
-        run_id,
-        status=status,
-        total_raw_captures=0,
-        total_extracted_events=len(payload.events),
-        new_events=new_events,
-        notified_events=notified_events,
-        error_summary="\n".join(errors) if errors else None,
-    )
-    if errors and not imported:
-        raise HTTPException(status_code=500, detail=errors)
+            if to_score:
+                interest_profile = get_current_interest_profile()
+                fresh_scores = score_events_for_interest(
+                    [upserted[i]["_event"] for i in to_score], interest_profile
+                )
+                for i, interest_score in zip(to_score, fresh_scores, strict=True):
+                    save_event_interest_score(upserted[i]["id"], interest_score)
+                    upserted[i]["interest_score"] = interest_score
 
-    return {
-        "run_id": run_id,
-        "status": status,
-        "total_events": len(payload.events),
-        "imported_events": len(imported),
-        "new_events": new_events,
-        "updated_events": len(imported) - new_events,
-        "notified_events": notified_events,
-        "errors": errors,
-        "items": imported,
-    }
+            for row in upserted:
+                row.pop("_event", None)
+                imported.append(row)
+
+            if payload.notify:
+                try:
+                    unnotified = get_unnotified_events()
+                    for notifier in (
+                        MarkdownNotifier(),
+                        FeishuNotifier(),
+                        FeishuAppNotifier(),
+                    ):
+                        notifier.notify(unnotified)
+                    mark_notified([event["id"] for event in unnotified])
+                    notified_events = len(unnotified)
+                except Exception as e:
+                    errors.append(f"notify: {e}")
+        except Exception as e:
+            errors.append(f"import: {e}")
+
+        status = "partial_success" if errors and imported else "failed" if errors else "success"
+        finish_run(
+            run_id,
+            status=status,
+            total_raw_captures=0,
+            total_extracted_events=len(payload.events),
+            new_events=new_events,
+            notified_events=notified_events,
+            error_summary="\n".join(errors) if errors else None,
+        )
+        if errors and not imported:
+            raise HTTPException(status_code=500, detail=errors)
+
+        return {
+            "run_id": run_id,
+            "status": status,
+            "total_events": len(payload.events),
+            "imported_events": len(imported),
+            "new_events": new_events,
+            "updated_events": len(imported) - new_events,
+            "notified_events": notified_events,
+            "errors": errors,
+            "items": imported,
+        }
 
 
 @app.get("/api/runs")

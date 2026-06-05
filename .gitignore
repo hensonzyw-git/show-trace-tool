@@ -7,6 +7,7 @@ data/raw/
 data/digests/
 data/events.db
 data/launchd.log
+data/run.lock
 data/local_inbox/*.json
 !data/local_inbox/.gitkeep
 

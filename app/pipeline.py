@@ -7,7 +7,6 @@ breaking the existing launchd entrypoint.
 
 import os
 import random
-import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -24,6 +23,7 @@ from db import (
     init_db,
     mark_notified,
     save_event_interest_score,
+    try_acquire_run_lock,
     upsert_event,
 )
 from extractor import extract_events
@@ -50,11 +50,6 @@ SOURCE_REGISTRY: dict[str, type] = {
 }
 if DamaiSource is not None:
     SOURCE_REGISTRY["damai"] = DamaiSource
-
-# Cron-triggered runs and manual POST /api/runs both land in the same web
-# process, so an in-process non-blocking lock is enough to stop two pipeline
-# passes from clobbering each other (duplicate fetches / double notifications).
-_run_lock = threading.Lock()
 
 
 @dataclass
@@ -131,23 +126,23 @@ def run_pipeline(
 ) -> dict[str, Any]:
     """Run one full collection pass and optionally persist a run record.
 
-    Guarded by a process-wide lock: if a run is already in progress, this
-    returns immediately with status "skipped" instead of starting a second
-    concurrent pass.
+    Guarded by a shared file lock: if a run/import is already in progress, this
+    returns immediately with status "skipped" instead of starting another pass.
     """
-    if not _run_lock.acquire(blocking=False):
-        print("[pipeline] 已有采集在进行中，跳过本次触发")
-        return {
-            "run_id": None,
-            "status": "skipped",
-            "total_raw_captures": 0,
-            "total_extracted_events": 0,
-            "new_events": 0,
-            "new_event_ids": [],
-            "notified_events": 0,
-            "errors": ["another run is already in progress"],
-        }
-    try:
+    with try_acquire_run_lock() as acquired:
+        if not acquired:
+            print("[pipeline] 已有采集或导入在进行中，跳过本次触发")
+            return {
+                "run_id": None,
+                "status": "skipped",
+                "total_raw_captures": 0,
+                "total_extracted_events": 0,
+                "new_events": 0,
+                "new_event_ids": [],
+                "notified_events": 0,
+                "errors": ["another run or import is already in progress"],
+            }
+
         load_dotenv(ROOT / ".env")
         init_db()
         subscription = bootstrap_subscription()
@@ -184,8 +179,6 @@ def run_pipeline(
         if run_id is not None:
             result["id"] = run_id
         return result
-    finally:
-        _run_lock.release()
 
 
 def _run_pipeline_body(

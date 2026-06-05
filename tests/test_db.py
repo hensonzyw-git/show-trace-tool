@@ -1,6 +1,7 @@
-"""Tests for the pure helpers in db.py (no SQLite / network needed)."""
+"""Tests for db.py helpers (no network needed)."""
 
-from db import make_event_id, normalize_event_date
+import db
+from db import make_event_id, normalize_event_date, try_acquire_run_lock
 
 
 class TestNormalizeEventDate:
@@ -49,3 +50,24 @@ class TestMakeEventId:
         base = {"type": "concert", "artist": "A", "event_date": "d", "venue": "v1"}
         other = {**base, "venue": "v2"}
         assert make_event_id(base) != make_event_id(other)
+
+
+class TestRunLock:
+    def test_nested_lock_is_not_acquired(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(db, "DATA_DIR", tmp_path)
+
+        with try_acquire_run_lock() as first:
+            assert first is True
+            with try_acquire_run_lock() as second:
+                assert second is False
+
+        assert (tmp_path / "run.lock").exists()
+
+    def test_lock_releases_after_context(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(db, "DATA_DIR", tmp_path)
+
+        with try_acquire_run_lock() as first:
+            assert first is True
+
+        with try_acquire_run_lock() as second:
+            assert second is True
