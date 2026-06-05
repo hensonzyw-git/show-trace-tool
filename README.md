@@ -163,33 +163,9 @@ DEEPSEEK_API_KEY=sk-xxx
 # 可选：偏好解析 / 推荐评分默认也复用 DeepSeek
 SHOW_TRACE_PREFERENCES_LLM=1
 SHOW_TRACE_PREFERENCES_MODEL=deepseek-chat
-
-# 可选：飞书 webhook，配了就推 Top 5 到飞书群（手机也收到）
-FEISHU_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/xxx
 ```
 
-### 飞书推送（可选，两种方式任选）
-
-**方式 A：群机器人 webhook（最简单，绑定一个群）**
-
-1. 在飞书任意群右上角点 **设置 → 群机器人 → 添加机器人 → 自定义机器人**
-2. 复制 webhook URL，填到 `.env::FEISHU_WEBHOOK_URL`
-
-**方式 B：自建应用机器人（更灵活，能推到任意 chat/user/email）**
-
-适合你在飞书开放平台已经有自建应用、配过 `im:message:send_as_bot` 权限的场景。
-
-1. 在 [飞书开放平台](https://open.feishu.cn/) 拿你的 `app_id` / `app_secret`
-2. 拿到目标 `receive_id`（chat_id / open_id / user_id 或邮箱）
-3. 填到 `.env`：
-   ```
-   FEISHU_APP_ID=cli_xxx
-   FEISHU_APP_SECRET=xxx
-   FEISHU_RECEIVE_ID=oc_xxx 或邮箱
-   FEISHU_RECEIVE_ID_TYPE=chat_id  # 或 open_id / email / user_id
-   ```
-
-两种方式都配的话两边都会推（不冲突）。每次跑 `main.py` 自动推 Top 5（按日期升序的今天及以后事件）。完整 digest 仍在本地 `data/digests/`。
+当前已验证的通知 / 查看出口是 Markdown digest、macOS 本地通知和 iOS App。
 
 ## 项目结构
 
@@ -214,6 +190,7 @@ notifiers/
   base.py               Notifier 抽象基类
   markdown.py           写 data/digests/digest_YYYY-MM-DD.md
   macos.py              macOS 原生系统通知
+ios/ShowTraceApp/       SwiftUI iOS 客户端（查看推荐 / 摘要 / 订阅 / 喜好）
 data/                   gitignore 的运行时数据：DB / raw / digests / log
   fixtures/             ←  这个不 ignore，是抽取链路的稳定参照样本
   local_inbox/          本机辅助采集 JSON 暂存目录（JSON 不进 Git）

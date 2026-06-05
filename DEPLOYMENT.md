@@ -64,17 +64,7 @@ SHOW_TRACE_DIGEST_DIR=
 SHOW_TRACE_RAW_DIR=
 ```
 
-### 2.3 可选通知配置
-
-```env
-FEISHU_WEBHOOK_URL=
-FEISHU_APP_ID=
-FEISHU_APP_SECRET=
-FEISHU_RECEIVE_ID=
-FEISHU_RECEIVE_ID_TYPE=chat_id
-```
-
-### 2.4 可选禁用 source
+### 2.3 可选禁用 source
 
 即使数据库订阅里启用了某个 source，也可以通过环境变量强制禁用：
 
@@ -112,8 +102,7 @@ Render cron job -> 调用 POST /api/runs -> web service 内部运行 pipeline ->
    SHOW_TRACE_CONFIG_PATH=config.cloud.yaml
    ```
 
-5. 可选填写飞书通知变量。
-6. 等 web service URL 生成后，给 cron job 填：
+5. 等 web service URL 生成后，给 cron job 填：
 
    ```env
    API_TOKEN=<同一份 token>
