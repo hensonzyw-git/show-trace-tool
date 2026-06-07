@@ -148,7 +148,14 @@ curl -H "Authorization: Bearer $API_TOKEN" \
   https://<your-render-service>.onrender.com/api/runs
 ```
 
-查看今日摘要：
+查看历史摘要列表：
+
+```bash
+curl -H "Authorization: Bearer $API_TOKEN" \
+  https://<your-render-service>.onrender.com/api/digests
+```
+
+查看今日摘要；若今天未生成，则回退到最近一份历史摘要：
 
 ```bash
 curl -H "Authorization: Bearer $API_TOKEN" \

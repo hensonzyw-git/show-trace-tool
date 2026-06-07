@@ -45,6 +45,13 @@ struct APIClient {
         try await get("/api/digests/today")
     }
 
+    func fetchDigests(limit: Int = 14) async throws -> DigestListResponse {
+        try await get(
+            "/api/digests",
+            queryItems: [URLQueryItem(name: "limit", value: String(limit))]
+        )
+    }
+
     func fetchSubscription() async throws -> Subscription {
         try await get("/api/subscriptions")
     }

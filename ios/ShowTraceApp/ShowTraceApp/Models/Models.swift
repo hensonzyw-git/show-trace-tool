@@ -53,11 +53,19 @@ struct ShowEvent: Decodable, Identifiable {
     }
 }
 
-struct DigestResponse: Decodable {
+struct DigestListResponse: Decodable {
+    let items: [DigestResponse]
+    let total: Int
+    let limit: Int
+    let offset: Int
+}
+
+struct DigestResponse: Decodable, Identifiable {
     let date: String
     let markdown: String
     let path: String
     let eventCount: Int?
+    var id: String { date }
 
     enum CodingKeys: String, CodingKey {
         case date

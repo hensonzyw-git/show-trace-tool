@@ -34,7 +34,8 @@
 打开：
 - `http://127.0.0.1:8000/health` —— 健康检查
 - `http://127.0.0.1:8000/api/events` —— 事件列表，支持 `interest_decision=keep|maybe|filter`
-- `http://127.0.0.1:8000/api/digests/today` —— 今日 Markdown 摘要
+- `http://127.0.0.1:8000/api/digests` —— 历史 Markdown 摘要列表，按日期倒序
+- `http://127.0.0.1:8000/api/digests/today` —— 今日 Markdown 摘要；若今天未生成，则回退到最近一份历史摘要
 - `http://127.0.0.1:8000/api/subscriptions` —— 当前订阅配置（GET / PUT）
 - `http://127.0.0.1:8000/api/preferences` —— 当前喜好画像（GET）
 - `http://127.0.0.1:8000/api/preferences/feedback` —— 自然语言喜好反馈（POST）

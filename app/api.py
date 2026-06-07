@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 from dotenv import load_dotenv
 
 from app.auth import require_api_token
-from app.database import count_events, database_exists, list_events, read_digest
+from app.database import count_events, database_exists, list_digests, list_events, read_digest
 from app.paths import ROOT
 load_dotenv(ROOT / ".env")
 
@@ -147,8 +147,25 @@ def get_events(
 def get_today_digest(_: None = Depends(require_api_token)) -> dict[str, Any]:
     digest = read_digest()
     if digest is None:
-        raise HTTPException(status_code=404, detail="Today's digest has not been generated")
+        digests = list_digests(limit=1)
+        digest = digests[0] if digests else None
+    if digest is None:
+        raise HTTPException(status_code=404, detail="No digest has been generated")
     return digest
+
+
+@app.get("/api/digests")
+def get_digests(
+    _: None = Depends(require_api_token),
+    limit: int = Query(14, ge=1, le=90),
+) -> dict[str, Any]:
+    items = list_digests(limit=limit)
+    return {
+        "items": items,
+        "total": len(items),
+        "limit": limit,
+        "offset": 0,
+    }
 
 
 @app.get("/api/subscriptions")

@@ -149,11 +149,37 @@ def read_digest(day: str | None = None) -> dict[str, Any] | None:
     if not path.exists():
         return None
 
+    return _read_digest_file(path, digest_date)
+
+
+def list_digests(limit: int = 14, before_or_on: str | None = None) -> list[dict[str, Any]]:
+    """List generated Markdown digests, newest first."""
+    latest_date = before_or_on or datetime.now().strftime("%Y-%m-%d")
+    if limit <= 0 or not DIGEST_DIR.exists():
+        return []
+
+    digests: list[dict[str, Any]] = []
+    for path in sorted(DIGEST_DIR.glob("digest_*.md"), reverse=True):
+        digest_date = path.stem.removeprefix("digest_")
+        if digest_date > latest_date:
+            continue
+        digest = _read_digest_file(path, digest_date)
+        digests.append(digest)
+        if len(digests) >= limit:
+            break
+    return digests
+
+
+def _read_digest_file(path, digest_date: str) -> dict[str, Any]:
     markdown = path.read_text(encoding="utf-8")
+    try:
+        display_path = str(path.relative_to(ROOT))
+    except ValueError:
+        display_path = str(path)
     return {
         "date": digest_date,
         "markdown": markdown,
-        "path": str(path.relative_to(ROOT)),
+        "path": display_path,
         "event_count": _extract_event_count(markdown),
     }
 

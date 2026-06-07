@@ -5,7 +5,7 @@ SwiftUI client for the Show Trace Tool API.
 ## Scope
 
 - View recommended / maybe / filtered events.
-- View today's digest.
+- View historical digests.
 - Edit subscription artists, local city, local keywords, and enabled sources.
 - Send natural-language preference feedback.
 - Store API base URL and token locally on device.
