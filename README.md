@@ -57,6 +57,10 @@ curl -X POST http://127.0.0.1:8000/api/runs \
   -d '{"fixture": true, "notify": false}'
 ```
 
+`POST /api/runs` 会立即返回一条 `status=running` 的运行记录，实际采集在
+后台继续执行；完成状态通过 `GET /api/runs` 查看。这样云端 cron 不会因为
+采集耗时超过 Nginx 超时而误报 504。
+
 iOS 推荐列表可以直接请求：
 
 ```bash

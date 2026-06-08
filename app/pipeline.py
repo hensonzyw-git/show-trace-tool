@@ -117,6 +117,85 @@ def init_profile_from_subscription() -> None:
     damai.init_profile(seed)
 
 
+LOCK_BUSY_ERROR = "another run or import is already in progress"
+
+
+def skipped_result(run_id: int | None) -> dict[str, Any]:
+    """Response payload for a run that was rejected because one is in progress."""
+    return {
+        "run_id": run_id,
+        "id": run_id,
+        "status": "skipped",
+        "total_raw_captures": 0,
+        "total_extracted_events": 0,
+        "new_events": 0,
+        "new_event_ids": [],
+        "notified_events": 0,
+        "errors": [LOCK_BUSY_ERROR],
+    }
+
+
+def running_result(run_id: int) -> dict[str, Any]:
+    """Response payload for a run that was accepted and is executing in the background."""
+    return {
+        "run_id": run_id,
+        "id": run_id,
+        "status": "running",
+        "total_raw_captures": 0,
+        "total_extracted_events": 0,
+        "new_events": 0,
+        "new_event_ids": [],
+        "notified_events": 0,
+        "errors": [],
+    }
+
+
+def _result_from_stats(run_id: int | None, stats: "PipelineStats") -> dict[str, Any]:
+    """Response payload for a completed run."""
+    return {
+        "run_id": run_id,
+        "id": run_id,
+        "status": stats.status,
+        "total_raw_captures": stats.total_raw_captures,
+        "total_extracted_events": stats.total_extracted_events,
+        "new_events": stats.new_events,
+        "new_event_ids": stats.new_event_ids,
+        "notified_events": stats.notified_events,
+        "errors": stats.errors,
+    }
+
+
+def _run_and_finalize(
+    run_id: int | None,
+    subscription: dict[str, Any],
+    *,
+    use_fixture: bool,
+    notify: bool,
+) -> dict[str, Any]:
+    """Execute the pipeline body and persist the outcome to ``run_id`` (if any).
+
+    Caller is responsible for holding the run lock and creating the run row.
+    """
+    stats = PipelineStats()
+    try:
+        _run_pipeline_body(subscription, use_fixture=use_fixture, notify=notify, stats=stats)
+    except Exception as e:
+        stats.errors.append(f"pipeline: {e}")
+        print(f"[pipeline] 失败: {e}")
+    finally:
+        if run_id is not None:
+            finish_run(
+                run_id,
+                status=stats.status,
+                total_raw_captures=stats.total_raw_captures,
+                total_extracted_events=stats.total_extracted_events,
+                new_events=stats.new_events,
+                notified_events=stats.notified_events,
+                error_summary="\n".join(stats.errors) if stats.errors else None,
+            )
+    return _result_from_stats(run_id, stats)
+
+
 def run_pipeline(
     *,
     use_fixture: bool = False,
@@ -132,53 +211,44 @@ def run_pipeline(
     with try_acquire_run_lock() as acquired:
         if not acquired:
             print("[pipeline] 已有采集或导入在进行中，跳过本次触发")
-            return {
-                "run_id": None,
-                "status": "skipped",
-                "total_raw_captures": 0,
-                "total_extracted_events": 0,
-                "new_events": 0,
-                "new_event_ids": [],
-                "notified_events": 0,
-                "errors": ["another run or import is already in progress"],
-            }
+            return skipped_result(None)
 
         load_dotenv(ROOT / ".env")
         init_db()
         subscription = bootstrap_subscription()
         run_id = create_run(trigger=trigger, fixture=use_fixture, notify=notify) if record_run else None
-        stats = PipelineStats()
+        return _run_and_finalize(run_id, subscription, use_fixture=use_fixture, notify=notify)
 
-        try:
-            _run_pipeline_body(subscription, use_fixture=use_fixture, notify=notify, stats=stats)
-        except Exception as e:
-            stats.errors.append(f"pipeline: {e}")
-            print(f"[pipeline] 失败: {e}")
-        finally:
-            if run_id is not None:
-                finish_run(
-                    run_id,
-                    status=stats.status,
-                    total_raw_captures=stats.total_raw_captures,
-                    total_extracted_events=stats.total_extracted_events,
-                    new_events=stats.new_events,
-                    notified_events=stats.notified_events,
-                    error_summary="\n".join(stats.errors) if stats.errors else None,
-                )
 
-        result = {
-            "run_id": run_id,
-            "status": stats.status,
-            "total_raw_captures": stats.total_raw_captures,
-            "total_extracted_events": stats.total_extracted_events,
-            "new_events": stats.new_events,
-            "new_event_ids": stats.new_event_ids,
-            "notified_events": stats.notified_events,
-            "errors": stats.errors,
-        }
-        if run_id is not None:
-            result["id"] = run_id
-        return result
+def run_pipeline_for_existing_run(
+    run_id: int,
+    *,
+    use_fixture: bool = False,
+    notify: bool = True,
+) -> dict[str, Any]:
+    """Run one collection pass for a run row that was already created.
+
+    This lets the API return immediately after creating a run record while the
+    actual worker continues in a FastAPI background task. The run row remains
+    visible as ``running`` until this function updates it.
+    """
+    with try_acquire_run_lock() as acquired:
+        if not acquired:
+            finish_run(
+                run_id,
+                status="skipped",
+                total_raw_captures=0,
+                total_extracted_events=0,
+                new_events=0,
+                notified_events=0,
+                error_summary=LOCK_BUSY_ERROR,
+            )
+            return skipped_result(run_id)
+
+        load_dotenv(ROOT / ".env")
+        init_db()
+        subscription = bootstrap_subscription()
+        return _run_and_finalize(run_id, subscription, use_fixture=use_fixture, notify=notify)
 
 
 def _run_pipeline_body(

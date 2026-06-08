@@ -3,7 +3,7 @@
 from contextlib import asynccontextmanager
 from typing import Any, Literal
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
 from dotenv import load_dotenv
 
@@ -12,7 +12,12 @@ from app.database import count_events, database_exists, list_digests, list_event
 from app.paths import ROOT
 load_dotenv(ROOT / ".env")
 
-from app.pipeline import bootstrap_subscription, run_pipeline
+from app.pipeline import (
+    bootstrap_subscription,
+    run_pipeline_for_existing_run,
+    running_result,
+    skipped_result,
+)
 from app.preferences import (
     get_current_interest_profile,
     parse_preference_feedback,
@@ -23,9 +28,11 @@ from db import (
     finish_run,
     get_event_interest_score,
     get_unnotified_events,
+    has_active_run,
     init_db,
     list_runs,
     mark_notified,
+    reset_stale_runs,
     save_event_interest_score,
     save_subscription,
     try_acquire_run_lock,
@@ -42,6 +49,11 @@ async def lifespan(app: FastAPI):
     # handlers never run DDL on the hot read path (see H1 in CODE_REVIEW.md).
     init_db()
     bootstrap_subscription()
+    # Reap any run rows left "running" by a worker that was killed/redeployed
+    # mid-pipeline; otherwise has_active_run() would block all future runs.
+    reaped = reset_stale_runs()
+    if reaped:
+        print(f"[api] reset {reaped} stale running run(s) at startup")
     yield
 
 
@@ -214,16 +226,27 @@ def _rescore_existing_events(*, limit: int, enabled: bool) -> int:
     return len(events)
 
 
-@app.post("/api/runs")
+@app.post("/api/runs", status_code=status.HTTP_202_ACCEPTED)
 def create_manual_run(
     payload: RunRequest,
+    background_tasks: BackgroundTasks,
     _: None = Depends(require_api_token),
 ) -> dict[str, Any]:
-    return run_pipeline(
+    # Hold the lock across the check + create so two concurrent requests can't
+    # both create a "running" row. has_active_run() is the durable guard once the
+    # lock is released (the background worker re-acquires the lock itself).
+    with try_acquire_run_lock() as acquired:
+        if not acquired or has_active_run():
+            return skipped_result(None)
+        run_id = create_run(trigger="api", fixture=payload.fixture, notify=payload.notify)
+
+    background_tasks.add_task(
+        run_pipeline_for_existing_run,
+        run_id,
         use_fixture=payload.fixture,
         notify=payload.notify,
-        trigger="api",
     )
+    return running_result(run_id)
 
 
 @app.post("/api/events/import")
@@ -236,7 +259,7 @@ def import_events(
         raise HTTPException(status_code=400, detail="events must not be empty")
 
     with try_acquire_run_lock() as acquired:
-        if not acquired:
+        if not acquired or has_active_run():
             return {
                 "run_id": None,
                 "status": "skipped",

@@ -645,3 +645,44 @@ def _run_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "notified_events": row["notified_events"],
         "error_summary": row["error_summary"],
     }
+
+
+def has_active_run() -> bool:
+    """True if a run row is currently marked ``running``.
+
+    Used as the durable concurrency guard for the async ``POST /api/runs`` path:
+    the file lock can't span the request -> background-task boundary, so the run
+    row itself is the source of truth for "a collection is already in flight".
+    Pair with :func:`reset_stale_runs` at startup so a crashed worker can't leave
+    a phantom running row that blocks all future runs.
+    """
+    init_db()
+    with _conn() as c:
+        row = c.execute(
+            "SELECT 1 FROM runs WHERE status = 'running' LIMIT 1"
+        ).fetchone()
+    return row is not None
+
+
+def reset_stale_runs(*, error_summary: str = "interrupted: server restarted") -> int:
+    """Mark any leftover ``running`` rows as failed. Returns the count reset.
+
+    Background runs execute in-process; if the process is killed or redeployed
+    mid-run the OS releases the file lock but the run row stays ``running``
+    forever. Call this once on boot. Assumes a single API worker per host (the
+    same assumption the file lock already makes).
+    """
+    init_db()
+    now = datetime.now().isoformat(timespec="seconds")
+    with _conn() as c:
+        cur = c.execute(
+            """
+            UPDATE runs SET
+                status = 'failed',
+                finished_at = ?,
+                error_summary = COALESCE(error_summary, ?)
+            WHERE status = 'running'
+            """,
+            (now, error_summary),
+        )
+        return cur.rowcount
