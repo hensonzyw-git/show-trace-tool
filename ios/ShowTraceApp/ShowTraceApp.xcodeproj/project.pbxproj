@@ -19,6 +19,8 @@
 		11000000000000000000000A /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000010A /* PreferencesView.swift */; };
 		11000000000000000000000B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000010B /* SettingsView.swift */; };
 		11000000000000000000000C /* SharedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000010C /* SharedViews.swift */; };
+		11000000000000000000000D /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000010F /* TodayView.swift */; };
+		11000000000000000000000E /* RunsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000110 /* RunsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +38,8 @@
 		11000000000000000000010C /* SharedViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedViews.swift; sourceTree = "<group>"; };
 		11000000000000000000010D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		11000000000000000000010E /* ShowTraceApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShowTraceApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		11000000000000000000010F /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
+		110000000000000000000110 /* RunsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -98,12 +102,14 @@
 		110000000000000000000306 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				11000000000000000000010F /* TodayView.swift */,
 				110000000000000000000106 /* EventsView.swift */,
 				110000000000000000000107 /* EventCard.swift */,
 				110000000000000000000108 /* DigestView.swift */,
 				110000000000000000000109 /* SubscriptionView.swift */,
 				11000000000000000000010A /* PreferencesView.swift */,
 				11000000000000000000010B /* SettingsView.swift */,
+				110000000000000000000110 /* RunsView.swift */,
 				11000000000000000000010C /* SharedViews.swift */,
 			);
 			path = Views;
@@ -189,6 +195,8 @@
 				11000000000000000000000A /* PreferencesView.swift in Sources */,
 				11000000000000000000000B /* SettingsView.swift in Sources */,
 				11000000000000000000000C /* SharedViews.swift in Sources */,
+				11000000000000000000000D /* TodayView.swift in Sources */,
+				11000000000000000000000E /* RunsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

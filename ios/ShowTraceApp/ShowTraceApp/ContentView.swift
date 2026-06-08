@@ -5,31 +5,31 @@ import UIKit
 
 struct ContentView: View {
     @EnvironmentObject private var settings: AppSettings
-    @State private var selectedTab: AppTab = .events
+    @State private var selectedTab: AppTab = .today
 
     var body: some View {
         TabView(selection: $selectedTab) {
+            TodayView()
+                .tabItem {
+                    Label("当日摘要", systemImage: "calendar.badge.clock")
+                }
+                .tag(AppTab.today)
+
             EventsView()
                 .tabItem {
-                    Label("推荐", systemImage: "sparkles")
+                    Label("全部演出", systemImage: "list.bullet")
                 }
                 .tag(AppTab.events)
 
-            DigestView()
-                .tabItem {
-                    Label("摘要", systemImage: "doc.text")
-                }
-                .tag(AppTab.digest)
-
             SubscriptionView()
                 .tabItem {
-                    Label("订阅", systemImage: "slider.horizontal.3")
+                    Label("订阅范围", systemImage: "star")
                 }
                 .tag(AppTab.subscription)
 
             PreferencesView()
                 .tabItem {
-                    Label("喜好", systemImage: "person.crop.circle.badge.checkmark")
+                    Label("偏好管理", systemImage: "slider.horizontal.3")
                 }
                 .tag(AppTab.preferences)
 
@@ -39,6 +39,7 @@ struct ContentView: View {
                 }
                 .tag(AppTab.settings)
         }
+        .preferredColorScheme(settings.themeMode.colorScheme)
         .dismissKeyboardOnBackgroundInteraction()
         .onAppear {
             if !settings.isConfigured {
@@ -49,8 +50,8 @@ struct ContentView: View {
 }
 
 private enum AppTab {
+    case today
     case events
-    case digest
     case subscription
     case preferences
     case settings

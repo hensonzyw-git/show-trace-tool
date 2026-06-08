@@ -70,7 +70,7 @@ function SectionLabel({ t, children, right }) {
 function TodayCard({ t }) {
   const d = R().today, picks = R().topPicks, keeps = R().events.filter(e => e.score.decision === 'keep');
   return (
-    <Screen t={t} active="今日">
+    <Screen t={t} active="当日摘要">
       <BigHeader t={t} kicker={`${d.date.replaceAll('-', '.')} ${d.weekday}`} title="今日雷达"
         right={<div style={{ position: 'relative', display: 'flex' }}>{ICONS.bell({ size: 23, c: t.text2 })}
           <span style={{ position: 'absolute', top: -2, right: -2, width: 8, height: 8, borderRadius: 999, background: t.accent, border: `1.5px solid ${t.bg}` }} /></div>} />
@@ -118,7 +118,7 @@ function AllCard({ t }) {
   const evs = R().events;
   const types = [['全部', true], ['演唱会', false], ['音乐会', false], ['话剧', false], ['体育', false], ['Livehouse', false]];
   return (
-    <Screen t={t} active="全部">
+    <Screen t={t} active="全部演出">
       <BigHeader t={t} title="全部演出" search />
       <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '14px 20px 4px' }}>
         {types.map(([l, on]) => <Pill key={l} t={t} on={on} accent={on ? t.accent : null}>{l}</Pill>)}
@@ -217,7 +217,7 @@ function DetailCard({ t }) {
 function SubsCard({ t }) {
   const s = R().subscription;
   return (
-    <Screen t={t} active="订阅">
+    <Screen t={t} active="订阅范围">
       <BigHeader t={t} title="我的订阅" right={<div style={{ width: 34, height: 34, borderRadius: 999, background: t.card, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: t.shadow }}>{ICONS.plus({ size: 21, c: t.accent })}</div>} />
 
       <SectionLabel t={t}>关注的艺人</SectionLabel>
@@ -273,7 +273,7 @@ function Toggle({ on, t }) {
 function PrefsCard({ t }) {
   const p = R().profile;
   return (
-    <Screen t={t} active="偏好">
+    <Screen t={t} active="偏好管理">
       <BigHeader t={t} title="兴趣偏好" />
 
       {/* NL feedback */}
@@ -332,7 +332,7 @@ const RUN_STATUS = {
 function RunsCard({ t }) {
   const runs = R().runs;
   return (
-    <Screen t={t} active="记录">
+    <Screen t={t} active="设置">
       <BigHeader t={t} title="采集记录" />
       {/* stat strip */}
       <div style={{ display: 'flex', gap: 11, padding: '8px 20px 0' }}>
@@ -370,5 +370,82 @@ function RunsCard({ t }) {
   );
 }
 
-window.CardScreens = { TodayCard, AllCard, DetailCard, SubsCard, PrefsCard, RunsCard };
+// ── 7. SETTINGS ──────────────────────────────────────────────
+function SettingsRow({ t, icon, title, sub, right, last, accentIcon }) {
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 15px' }}>
+        {icon && <span style={{ display: 'flex', flexShrink: 0, color: accentIcon ? t.accent : t.text3 }}>{ICONS[icon]({ size: 19, c: accentIcon ? t.accent : t.text3 })}</span>}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: SF, fontSize: 15.5, fontWeight: 600, color: t.text }}>{title}</div>
+          {sub && <div style={{ fontFamily: SF, fontSize: 12, color: t.text2, marginTop: 1 }}>{sub}</div>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>{right}</div>
+      </div>
+      {!last && <div style={{ height: 0.5, background: t.sep, marginLeft: icon ? 46 : 15 }} />}
+    </div>
+  );
+}
+function ThemeSeg({ t }) {
+  const items = ['跟随系统', '浅色', '深色'];
+  const on = t.dark ? '深色' : '浅色';
+  return (
+    <div style={{ background: t.dark ? 'rgba(255,255,255,0.08)' : 'rgba(118,118,128,0.12)', borderRadius: 9, padding: 2, display: 'flex' }}>
+      {items.map(l => (
+        <span key={l} style={{ padding: '5px 11px', borderRadius: 7, fontFamily: SF, fontSize: 12.5, fontWeight: l === on ? 650 : 540, color: t.text, background: l === on ? t.card : 'transparent', boxShadow: l === on ? '0 1px 2px rgba(0,0,0,0.18)' : 'none' }}>{l}</span>
+      ))}
+    </div>
+  );
+}
+function SettingsCard({ t }) {
+  const last = R().runs[0]; // today 10:00 success
+  const [lbl, col] = RUN_STATUS[last.status];
+  const chev = ICONS.chev({ size: 16, c: t.text3 });
+  const Card = ({ children }) => <div style={{ margin: '0 20px', background: t.card, borderRadius: t.radius, overflow: 'hidden', boxShadow: t.shadow, border: t.dark ? `0.5px solid ${t.sep}` : 'none' }}>{children}</div>;
+  return (
+    <Screen t={t} active="设置">
+      <BigHeader t={t} title="设置" />
+
+      {/* account / profile */}
+      <div style={{ padding: '6px 20px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 13, background: t.card, borderRadius: t.radius, padding: 15, boxShadow: t.shadow, border: t.dark ? `0.5px solid ${t.sep}` : 'none' }}>
+          <div style={{ width: 46, height: 46, borderRadius: 999, background: t.accent, color: t.accentText, fontFamily: SF, fontSize: 18, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>沪</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: SF, fontSize: 17, fontWeight: 740, color: t.text }}>上海 · 我的雷达</div>
+            <div style={{ fontFamily: SF, fontSize: 12.5, color: t.text2, marginTop: 1 }}>4 位关注艺人 · 2 个数据源开启</div>
+          </div>
+          {chev}
+        </div>
+      </div>
+
+      <SectionLabel t={t}>外观</SectionLabel>
+      <Card><SettingsRow t={t} icon="prefs" title="主题" right={<ThemeSeg t={t} />} last /></Card>
+
+      <SectionLabel t={t}>通知</SectionLabel>
+      <Card>
+        <SettingsRow t={t} icon="bell" title="开票提醒" sub="即将开票的演出提前推送" right={<Toggle on t={t} />} />
+        <SettingsRow t={t} icon="today" title="每日摘要推送" sub="每天 09:00 · 仅「关注」级" right={<Toggle on t={t} />} />
+        <SettingsRow t={t} icon="ticket" title="价格变动提醒" sub="关注的演出降价时通知" right={<Toggle on={false} t={t} />} last />
+      </Card>
+
+      <SectionLabel t={t}>数据采集</SectionLabel>
+      <Card>
+        <SettingsRow t={t} icon="runs" title="采集记录" accentIcon
+          sub={`最近一次 ${last.date} ${last.time}`}
+          right={<><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: SF, fontSize: 12, fontWeight: 600, color: col }}><span style={{ width: 7, height: 7, borderRadius: 999, background: col }} />{lbl}</span>{chev}</>} />
+        <SettingsRow t={t} icon="clock" title="采集频率" right={<><span style={{ fontFamily: SF, fontSize: 14, color: t.text2 }}>每日 2 次</span>{chev}</>} />
+        <SettingsRow t={t} icon="subs" title="管理数据源" sub="大麦 / 秀动 已开启 · 摩天轮 关闭" right={chev} last />
+      </Card>
+
+      <SectionLabel t={t}>关于</SectionLabel>
+      <Card>
+        <SettingsRow t={t} title="给个反馈" right={chev} />
+        <SettingsRow t={t} title="隐私与数据" right={chev} />
+        <SettingsRow t={t} title="版本" right={<span style={{ fontFamily: SF, fontSize: 14, color: t.text3 }}>1.0.3 (42)</span>} last />
+      </Card>
+    </Screen>
+  );
+}
+
+window.CardScreens = { TodayCard, AllCard, DetailCard, SubsCard, PrefsCard, RunsCard, SettingsCard };
 })();

@@ -134,15 +134,17 @@ exists, keep the striped placeholder as the graceful fallback.
 
 ## Screens / Views
 
-There are **6 screens** under a 5-item bottom tab bar: **今日 (Today)** · **全部 (All)** ·
-**订阅 (Subscriptions)** · **偏好 (Preferences)** · **记录 (Runs)**. The **演出详情 (Detail)** screen
-is pushed on top of 今日 / 全部 (not a tab).
+There are **6 screens** under a 5-item bottom tab bar: **当日摘要 (Today digest)** · **全部演出 (All)** ·
+**订阅范围 (Subscription scope)** · **偏好管理 (Preferences)** · **设置 (Settings)**. The **演出详情 (Detail)**
+screen is pushed on top of 当日摘要 / 全部演出 (not a tab), and **采集记录 (Collection log / Runs)** is a
+pushed sub-screen reached from **设置 › 采集记录** (not a tab).
 
 ### Bottom Tab Bar (global)
-- 5 equal-width items, each = 25px icon over a 10.5px label, vertical stack, 3px gap.
+- 5 equal-width items, each = 25px icon over a 10px label (nowrap), vertical stack, 3px gap.
 - Active item uses `accent` for both icon + label (weight 650); idle uses `tabIdle` (weight 510).
 - Bar background `barBg` with `backdrop-filter: blur(20px) saturate(180%)`, top hairline `0.5px sep`.
-- Icons: 今日=calendar w/ dot, 全部=list, 订阅=star outline, 偏好=sliders, 记录=line-chart.
+- Tabs (label / icon): 当日摘要=calendar w/ dot · 全部演出=list · 订阅范围=star outline ·
+  偏好管理=sliders · 设置=gear.
 
 ### 1. 今日 (Today / Feed)
 - **Purpose**: the daily digest — what's new today, what starts soonest, what matches the user's taste.
@@ -211,10 +213,26 @@ is pushed on top of 今日 / 全部 (not a tab).
   5. **排序偏好 & 信号**: a numbered list card (`未来三个月优先`, `票价 ≤ 1000 优先`), then signal chips —
      positive `＋ 爵士现场` `＋ 周杰伦` (keep color), negative `－ 商场快闪活动` (muted).
 
-### 6. 记录 (Runs / Collection Log)
+### 6. 设置 (Settings)
+- **Purpose**: app-level configuration + the entry point to backend transparency (采集记录).
+- **Layout**:
+  1. Header `设置`.
+  2. **Account card**: 46px accent avatar (`沪`) + `上海 · 我的雷达` + sub `4 位关注艺人 · 2 个数据源开启`, chevron.
+  3. **外观** section: single row `主题` with an inline **segmented control** (`跟随系统` / `浅色` / `深色`);
+     selected segment reflects the active theme.
+  4. **通知** section: rows with toggles — `开票提醒` (on, `即将开票的演出提前推送`), `每日摘要推送`
+     (on, `每天 09:00 · 仅「关注」级`), `价格变动提醒` (off, `关注的演出降价时通知`).
+  5. **数据采集** section: `采集记录` row (accent icon, sub = last-run time, right = status dot+label
+     `成功` + chevron → pushes the Runs screen), `采集频率` (`每日 2 次`, chevron), `管理数据源`
+     (`大麦 / 秀动 已开启 · 摩天轮 关闭`, chevron → 订阅范围).
+  6. **关于** section: `给个反馈`, `隐私与数据`, `版本 1.0.3 (42)`.
+- Settings rows: icon (19px, text3 — accent only for 采集记录) + title (15.5/600) + optional sub (12/text2)
+  + right accessory; hairline separators inset 46px (with icon) / 15px (without).
+
+### 6b. 采集记录 (Collection Log / Runs) — pushed from 设置
 - **Purpose**: transparency into the daily scraper — what ran, what it found, what failed.
 - **Layout**:
-  1. Header `采集记录`.
+  1. Header `采集记录` (keeps the 设置 tab active).
   2. **Stat strip**: 3 cards — `今日新增 8` (accent), `本周采集 253`, `已通知 14`.
   3. **运行历史** list of run cards. Each: status dot + `date time` + status pill (`成功`/`部分成功`/`失败`)
      + right-aligned uppercase trigger (`CRON` / `API` / `LOCAL-SYNC`). Stat row: 抓取/抽取/新增/通知
@@ -233,6 +251,8 @@ The prototype is static, but the intended behavior:
 - **Search field** → search screen (out of scope for this handoff; not designed).
 - **Subscription toggles / chips**: editing pushes `PUT /api/subscriptions`. Adding artist/keyword via
   the dashed chips.
+- **Settings**: 主题 segmented sets the theme override; 采集记录 row → push Runs screen; 管理数据源 → 订阅范围;
+  notification toggles persist locally / to the backend.
 - **更新偏好** → `POST /api/preferences/feedback` with the typed text; on success, re-score visible events
   and refresh decision badges.
 - **Theme**: support Light + Dark; follow the system appearance by default with a manual override.
@@ -241,7 +261,7 @@ The prototype is static, but the intended behavior:
 
 ## State Management
 - `theme`: `'light' | 'dark'` (default = system).
-- `activeTab`: one of `今日 / 全部 / 订阅 / 偏好 / 记录`.
+- `activeTab`: one of `当日摘要 / 全部演出 / 订阅范围 / 偏好管理 / 设置`.
 - `events`: list from `GET /api/events` (filterable). Each carries an embedded `score`.
 - `filters`: `{ category, decision, city, type, date_from, date_to }`.
 - `digest`: `GET /api/digests/today` (today's new count + top picks).
@@ -261,7 +281,7 @@ See `data.js` for a fully-populated, real example set (16 Shanghai events + prof
 ## Assets
 - **No bitmap assets.** All icons are inline geometric SVGs (1.8px stroke) — see `ICONS` in `radar-ui.jsx`;
   reimplement with SF Symbols on iOS (calendar, list.bullet, star, slider.horizontal.3, chart.line.uptrend,
-  mappin, ticket, bell, magnifyingglass, chevron.right, checkmark, plus, clock, bolt.fill).
+  mappin, ticket, bell, magnifyingglass, chevron.right, checkmark, plus, clock, bolt.fill, gearshape).
 - **Event posters** are placeholders (striped, category-tinted) — replace with real artwork when available.
 
 ## Files (in this bundle)

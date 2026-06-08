@@ -134,9 +134,9 @@ struct EventCard: View {
     private var sourceTag: some View {
         HStack(spacing: 5) {
             Circle()
-                .fill(sourceColor)
+                .fill(EventSource.color(for: event.source))
                 .frame(width: 6, height: 6)
-            Text(sourceLabel)
+            Text(EventSource.label(for: event.source) ?? "未知")
                 .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(.secondary)
         }
@@ -144,32 +144,6 @@ struct EventCard: View {
 
     private var category: String {
         EventCategory.resolved(for: event)
-    }
-
-    private var sourceLabel: String {
-        switch event.source?.lowercased() {
-        case "damai":
-            return "大麦"
-        case "showstart":
-            return "秀动"
-        case "motianlun":
-            return "摩天轮"
-        default:
-            return event.source?.isEmpty == false ? event.source! : "未知"
-        }
-    }
-
-    private var sourceColor: Color {
-        switch sourceLabel {
-        case "大麦":
-            return .showRadarAccent
-        case "秀动":
-            return .blue
-        case "摩天轮":
-            return .teal
-        default:
-            return .secondary
-        }
     }
 
     @MainActor

@@ -2,100 +2,167 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var settings: AppSettings
+
+    @State private var runs: [RunItem] = []
     @State private var testMessage: String?
     @State private var isTesting = false
-    @State private var runs: [RunItem] = []
-    @State private var isLoadingRuns = false
-    @State private var isTriggeringRun = false
-    @State private var runMessage: String?
+    @State private var showSources = false
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("API") {
-                    TextField("https://example.com", text: $settings.baseURL)
-                        .autocorrectionDisabled()
-                    SecureField("API token", text: $settings.apiToken)
-                        .autocorrectionDisabled()
-                    Button {
-                        settings.useProductionServer()
-                    } label: {
-                        Label("使用服务器地址", systemImage: "server.rack")
-                    }
-                }
-
-                Section {
-                    Button {
-                        Task { await testConnection() }
-                    } label: {
-                        if isTesting {
-                            ProgressView()
-                        } else {
-                            Label("测试连接", systemImage: "network")
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    header
+                    settingsSection("外观") {
+                        SettingsCard {
+                            themePicker
+                                .padding(.horizontal, 15)
+                                .padding(.vertical, 13)
                         }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isTesting)
-
-                    if let testMessage {
-                        Text(testMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section("运行") {
-                    HStack {
-                        Button {
-                            Task { await loadRuns() }
-                        } label: {
-                            if isLoadingRuns {
-                                ProgressView()
-                            } else {
-                                Label("刷新记录", systemImage: "clock.arrow.circlepath")
+                    settingsSection("数据采集") {
+                        SettingsCard {
+                            NavigationLink {
+                                RunsView()
+                            } label: {
+                                SettingsRow(
+                                    icon: "chart.xyaxis.line",
+                                    title: "采集记录",
+                                    subtitle: latestRunSubtitle,
+                                    accentIcon: true,
+                                    trailing: AnyView(runStatusView)
+                                )
                             }
-                        }
-                        .disabled(isLoadingRuns || !settings.isConfigured)
-
-                        Button {
-                            Task { await triggerRun() }
-                        } label: {
-                            if isTriggeringRun {
-                                ProgressView()
-                            } else {
-                                Label("手动采集", systemImage: "play")
+                            .buttonStyle(.plain)
+                            SettingsDivider(hasIcon: true)
+                            Button {
+                                showSources = true
+                            } label: {
+                                SettingsRow(
+                                    icon: "star",
+                                    title: "管理数据源"
+                                )
                             }
+                            .buttonStyle(.plain)
                         }
-                        .disabled(isTriggeringRun || !settings.isConfigured)
                     }
-
-                    if let runMessage {
-                        Text(runMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                    settingsSection("连接") {
+                        SettingsCard {
+                            TextField("https://example.com", text: $settings.baseURL)
+                                .font(.system(size: 15))
+                                .autocorrectionDisabled()
+                                .textInputAutocapitalization(.never)
+                                .padding(.horizontal, 15)
+                                .padding(.top, 13)
+                            SettingsDivider(hasIcon: false)
+                            SecureField("API token", text: $settings.apiToken)
+                                .font(.system(size: 15))
+                                .autocorrectionDisabled()
+                                .textInputAutocapitalization(.never)
+                                .padding(.horizontal, 15)
+                                .padding(.vertical, 13)
+                            SettingsDivider(hasIcon: false)
+                            HStack {
+                                Button {
+                                    settings.useProductionServer()
+                                } label: {
+                                    Label("使用服务器地址", systemImage: "server.rack")
+                                }
+                                Spacer()
+                                Button {
+                                    Task { await testConnection() }
+                                } label: {
+                                    if isTesting {
+                                        ProgressView()
+                                    } else {
+                                        Text("测试连接")
+                                    }
+                                }
+                                .disabled(isTesting)
+                            }
+                            .font(.system(size: 14, weight: .semibold))
+                            .padding(.horizontal, 15)
+                            .padding(.vertical, 12)
+                        }
+                        if let testMessage {
+                            Text(testMessage)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 20)
+                                .padding(.top, 8)
+                        }
                     }
-
-                    if runs.isEmpty {
-                        Text("暂无运行记录")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(runs) { run in
-                            RunRow(run: run)
+                    settingsSection("关于") {
+                        SettingsCard {
+                            SettingsRow(
+                                title: "版本",
+                                trailing: AnyView(Text(appVersion).font(.system(size: 14)).foregroundStyle(.secondary))
+                            )
                         }
                     }
                 }
-
-                Section("说明") {
-                    Text("API token 只保存在本机。开发时可以填本地地址；真机访问本机服务时需要使用局域网 IP。若 Xcode 真机调试连接异常，先关闭 VPN 或系统代理。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                .padding(.bottom, 92)
             }
-            .navigationTitle("设置")
+            .background(Color.showRadarScreenBackground)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
+            .sheet(isPresented: $showSources) {
+                SubscriptionView()
+            }
             .task {
                 await loadRuns()
             }
         }
+    }
+
+    private var header: some View {
+        Text("设置")
+            .font(.system(size: 32, weight: .heavy))
+            .foregroundStyle(.primary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .padding(.bottom, 14)
+    }
+
+    private var themePicker: some View {
+        Picker("主题", selection: $settings.themeMode) {
+            ForEach(ThemeMode.allCases) { mode in
+                Text(mode.title).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
+    private var runStatusView: some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(RunStatus.color(latestRun?.status))
+                .frame(width: 7, height: 7)
+            Text(RunStatus.label(latestRun?.status))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(RunStatus.color(latestRun?.status))
+        }
+    }
+
+    @ViewBuilder
+    private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        Text(title)
+            .font(.system(size: 19, weight: .bold))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 9)
+        content()
+    }
+
+    @MainActor
+    private func loadRuns() async {
+        guard settings.isConfigured else { return }
+        // This only powers the latest-run status preview; fail silently so it
+        // can't clobber the connection-test message shown in the 连接 section.
+        runs = (try? await APIClient(settings: settings).fetchRuns(limit: 5).items) ?? runs
     }
 
     @MainActor
@@ -105,84 +172,98 @@ struct SettingsView: View {
         do {
             _ = try await APIClient(settings: settings).fetchEvents(decision: .keep, limit: 1)
             testMessage = "连接成功。"
+            await loadRuns()
         } catch {
             testMessage = error.localizedDescription
         }
         isTesting = false
     }
 
-    @MainActor
-    private func loadRuns() async {
-        guard settings.isConfigured else { return }
-        isLoadingRuns = true
-        runMessage = nil
-        do {
-            runs = try await APIClient(settings: settings).fetchRuns(limit: 5).items
-        } catch {
-            runMessage = error.localizedDescription
-        }
-        isLoadingRuns = false
+    private var latestRun: RunItem? {
+        runs.first
     }
 
-    @MainActor
-    private func triggerRun() async {
-        guard settings.isConfigured else { return }
-        isTriggeringRun = true
-        runMessage = nil
-        do {
-            let result = try await APIClient(settings: settings).triggerRun(fixture: false, notify: false)
-            runMessage = "运行 \(result.status)：新增 \(result.newEvents) 条，抽取 \(result.totalExtractedEvents) 条。"
-            await loadRuns()
-        } catch {
-            runMessage = error.localizedDescription
-        }
-        isTriggeringRun = false
+    private var latestRunSubtitle: String {
+        guard let latestRun else { return "暂无运行记录" }
+        return "最近一次 \(latestRun.startedAt)"
+    }
+
+    private var appVersion: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = info?["CFBundleVersion"] as? String ?? "—"
+        return "\(version) (\(build))"
     }
 }
 
-private struct RunRow: View {
-    let run: RunItem
+private struct SettingsCard<Content: View>: View {
+    private let content: () -> Content
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(run.status)
-                    .font(.subheadline.bold())
-                    .foregroundStyle(statusColor)
-                Spacer()
-                Text("#\(run.id)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Text("\(run.trigger) · \(run.startedAt)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Text("抽取 \(run.totalExtractedEvents) · 新增 \(run.newEvents) · 通知 \(run.notifiedEvents)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            if let error = run.errorSummary, !error.isEmpty {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .lineLimit(2)
-            }
-        }
-        .padding(.vertical, 4)
+    init(@ViewBuilder content: @escaping () -> Content) {
+        self.content = content
     }
 
-    private var statusColor: Color {
-        switch run.status {
-        case "success":
-            return .green
-        case "partial_success", "skipped":
-            return .orange
-        case "failed":
-            return .red
-        default:
-            return .secondary
+    var body: some View {
+        VStack(spacing: 0) {
+            content()
         }
+        .background(Color.showRadarCardBackground, in: RoundedRectangle(cornerRadius: 18))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 0.5)
+        }
+        .shadow(color: .black.opacity(0.05), radius: 16, x: 0, y: 8)
+        .padding(.horizontal, 20)
+    }
+}
+
+private struct SettingsRow: View {
+    var icon: String? = nil
+    let title: String
+    var subtitle: String? = nil
+    var accentIcon = false
+    var trailing: AnyView? = nil
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(accentIcon ? Color.showRadarAccent : Color.secondary)
+                    .frame(width: 19)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 15.5, weight: .semibold))
+                    .foregroundStyle(.primary)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 8)
+            if let trailing {
+                trailing
+            } else {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 15)
+        .padding(.vertical, 13)
+    }
+}
+
+private struct SettingsDivider: View {
+    let hasIcon: Bool
+
+    var body: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.07))
+            .frame(height: 0.5)
+            .padding(.leading, hasIcon ? 46 : 15)
     }
 }

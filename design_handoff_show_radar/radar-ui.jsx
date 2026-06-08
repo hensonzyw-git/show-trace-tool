@@ -65,6 +65,7 @@ const ICONS = {
   subs: (p) => <Ic {...p} d={<><path d="M12 4l2.2 4.6 5 .7-3.6 3.5.9 5L12 15.9 7.5 17.8l.9-5L4.8 9.3l5-.7z"/></>} />,
   prefs: (p) => <Ic {...p} d={<><path d="M5 7h14M5 12h14M5 17h14"/><circle cx="9" cy="7" r="2.2" fill="var(--ic-bg)"/><circle cx="15" cy="12" r="2.2" fill="var(--ic-bg)"/><circle cx="8" cy="17" r="2.2" fill="var(--ic-bg)"/></>} />,
   runs: (p) => <Ic {...p} d={<><path d="M4 19V5M4 19h16"/><path d="M8 16l3.5-4 3 2.5L20 8"/></>} />,
+  settings: (p) => <Ic {...p} d={<><circle cx="12" cy="12" r="3.4"/><path d="M19.4 12.9a7.6 7.6 0 000-1.8l1.9-1.5-1.9-3.3-2.3.9a7.3 7.3 0 00-1.5-.9l-.3-2.4H10l-.3 2.4a7.3 7.3 0 00-1.5.9l-2.3-.9L4 9.6l1.9 1.5a7.6 7.6 0 000 1.8L4 14.4l1.9 3.3 2.3-.9c.5.4 1 .7 1.5.9l.3 2.4h4l.3-2.4c.5-.2 1-.5 1.5-.9l2.3.9 1.9-3.3z"/></>} />,
   cal: (p) => <Ic {...p} d={<><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></>} />,
   pin: (p) => <Ic {...p} d={<><path d="M12 21c4-4.5 7-8 7-11a7 7 0 10-14 0c0 3 3 6.5 7 11z"/><circle cx="12" cy="10" r="2.4"/></>} />,
   ticket: (p) => <Ic {...p} d={<><path d="M4 8a2 2 0 012-2h12a2 2 0 012 2 2 2 0 000 4 2 2 0 00-2 2v0a2 2 0 01-2 2H6a2 2 0 01-2-2 2 2 0 000-4 2 2 0 002-2z"/><path d="M14 6v12" strokeDasharray="1.5 2.5"/></>} />,
@@ -139,11 +140,11 @@ function Poster({ ev, t, w = '100%', h = 96, radius = 12, label = true }) {
 
 // ── Bottom tab bar ───────────────────────────────────────────
 const TABS = [
-  { id: '今日', icon: 'today' },
-  { id: '全部', icon: 'list' },
-  { id: '订阅', icon: 'subs' },
-  { id: '偏好', icon: 'prefs' },
-  { id: '记录', icon: 'runs' },
+  { id: '当日摘要', icon: 'today' },
+  { id: '全部演出', icon: 'list' },
+  { id: '订阅范围', icon: 'subs' },
+  { id: '偏好管理', icon: 'prefs' },
+  { id: '设置', icon: 'settings' },
 ];
 function TabBar({ active, t }) {
   return (
@@ -163,7 +164,7 @@ function TabBar({ active, t }) {
             <div style={{ '--ic-bg': t.barBg, color: col, display: 'flex' }}>
               {ICONS[tab.icon]({ size: 25, c: col })}
             </div>
-            <span style={{ fontFamily: SF, fontSize: 10.5, fontWeight: on ? 650 : 510, color: col, letterSpacing: 0 }}>{tab.id}</span>
+            <span style={{ fontFamily: SF, fontSize: 10, fontWeight: on ? 650 : 510, color: col, letterSpacing: -0.2, whiteSpace: 'nowrap' }}>{tab.id}</span>
           </div>
         );
       })}

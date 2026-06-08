@@ -25,7 +25,8 @@ function App() {
       <PairSection id="detail" title="演出详情" subtitle="雷达评分理由 · 场馆票价 · 去大麦购票" El={C.DetailCard} />
       <PairSection id="subs" title="订阅" subtitle="关注艺人 · 本地关键词 · 多平台数据源开关" El={C.SubsCard} />
       <PairSection id="prefs" title="兴趣偏好" subtitle="大白话调教推荐 · 想看 / 不想看品类 · 信号" El={C.PrefsCard} />
-      <PairSection id="runs" title="采集记录" subtitle="每日采集统计 · 运行历史与错误" El={C.RunsCard} />
+      <PairSection id="settings" title="设置" subtitle="外观主题 · 通知 · 数据采集 · 关于" El={C.SettingsCard} />
+      <PairSection id="runs" title="采集记录（设置内）" subtitle="从「设置 › 采集记录」进入 · 每日统计与运行历史" El={C.RunsCard} />
     </DesignCanvas>
   );
 }

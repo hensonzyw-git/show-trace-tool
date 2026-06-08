@@ -21,6 +21,76 @@ extension Color {
     }
 }
 
+// MARK: - Source taxonomy
+// Single source of truth for mapping a backend `source` slug to its display
+// label and accent color. Used by every card so the mapping never drifts.
+
+enum EventSource {
+    static func label(for source: String?) -> String? {
+        switch source?.lowercased() {
+        case "damai":
+            return "大麦"
+        case "showstart":
+            return "秀动"
+        case "motianlun":
+            return "摩天轮"
+        case let value? where !value.isEmpty:
+            return value
+        default:
+            return nil
+        }
+    }
+
+    static func color(for source: String?) -> Color {
+        switch label(for: source) {
+        case "大麦":
+            return .showRadarAccent
+        case "秀动":
+            return .blue
+        case "摩天轮":
+            return .teal
+        default:
+            return .secondary
+        }
+    }
+}
+
+// MARK: - Run status taxonomy
+// Single source of truth for a pipeline run's status string (mirrors
+// PipelineStats.status / the API). Used by Settings and Runs views.
+
+enum RunStatus {
+    static func label(_ status: String?) -> String {
+        switch status {
+        case "success":
+            return "成功"
+        case "partial_success":
+            return "部分成功"
+        case "failed":
+            return "失败"
+        case "running":
+            return "运行中"
+        case "skipped":
+            return "跳过"
+        default:
+            return "未知"
+        }
+    }
+
+    static func color(_ status: String?) -> Color {
+        switch status {
+        case "success":
+            return .green
+        case "partial_success", "running", "skipped":
+            return .orange
+        case "failed":
+            return .red
+        default:
+            return .secondary
+        }
+    }
+}
+
 // MARK: - Category taxonomy
 // Mirrors the backend `interest_category` values produced in app/preferences.py
 // (体育比赛 / 演唱会 / 音乐会 / 话剧 / 展览 / 亲子 / 曲艺杂谈 / 其他). Both the card
