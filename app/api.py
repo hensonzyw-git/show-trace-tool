@@ -23,10 +23,12 @@ from app.preferences import (
     parse_preference_feedback,
     score_events_for_interest,
 )
+from app.summary import build_daily_summary, read_daily_summary
 from db import (
     create_run,
     finish_run,
     get_event_interest_score,
+    get_interest_profile,
     get_unnotified_events,
     has_active_run,
     init_db,
@@ -34,6 +36,7 @@ from db import (
     mark_notified,
     reset_stale_runs,
     save_event_interest_score,
+    save_interest_profile,
     save_subscription,
     try_acquire_run_lock,
     upsert_event,
@@ -54,6 +57,15 @@ async def lifespan(app: FastAPI):
     reaped = reset_stale_runs()
     if reaped:
         print(f"[api] reset {reaped} stale running run(s) at startup")
+    # Bootstrap the 当日摘要 snapshot once at boot if none exists yet (fresh
+    # deploy before the first pipeline run), so GET /api/digests/today stays a
+    # pure read. Best-effort: failures must not block startup.
+    if read_daily_summary() is None:
+        try:
+            build_daily_summary()
+            print("[api] bootstrapped 当日摘要 snapshot at startup")
+        except Exception as e:  # noqa: BLE001
+            print(f"[api] summary bootstrap skipped: {e}")
     yield
 
 
@@ -157,13 +169,27 @@ def get_events(
 
 @app.get("/api/digests/today")
 def get_today_digest(_: None = Depends(require_api_token)) -> dict[str, Any]:
+    # Structured 当日摘要 snapshot (keep + unexpired, score desc) drives the iOS
+    # feed; the legacy markdown digest is included when present for the full text.
+    # The snapshot is built by the pipeline run and bootstrapped at startup, so
+    # this read path stays side-effect-free.
+    summary = read_daily_summary()
     digest = read_digest()
     if digest is None:
         digests = list_digests(limit=1)
         digest = digests[0] if digests else None
-    if digest is None:
+    if summary is None and digest is None:
         raise HTTPException(status_code=404, detail="No digest has been generated")
-    return digest
+
+    result: dict[str, Any] = {}
+    if digest:
+        result.update(digest)  # date / markdown / path / event_count
+    if summary:
+        result["date"] = summary["date"]
+        result["generated_at"] = summary["generated_at"]
+        result["events"] = summary["events"]
+        result["event_count"] = summary["event_count"]
+    return result
 
 
 @app.get("/api/digests")
@@ -190,7 +216,16 @@ def update_default_subscription(
     payload: SubscriptionPayload,
     _: None = Depends(require_api_token),
 ) -> dict[str, Any]:
-    return save_subscription(payload.model_dump())
+    saved = save_subscription(payload.model_dump())
+    # Q4: city is a single concept across subscription + interest profile.
+    # local.city is the source of truth; keep the profile's city in sync.
+    city = (saved.get("local") or {}).get("city")
+    if city:
+        profile = get_interest_profile() or {}
+        if profile.get("city") != city:
+            profile["city"] = city
+            save_interest_profile(profile)
+    return saved
 
 
 @app.get("/api/preferences")

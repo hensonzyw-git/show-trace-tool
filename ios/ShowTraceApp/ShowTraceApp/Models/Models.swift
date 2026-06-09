@@ -62,13 +62,19 @@ struct DigestListResponse: Decodable {
 
 struct DigestResponse: Decodable, Identifiable {
     let date: String
-    let markdown: String
-    let path: String
+    let generatedAt: String?
+    let events: [ShowEvent]?
+    let markdown: String?
+    let path: String?
     let eventCount: Int?
     var id: String { date }
 
+    var feedEvents: [ShowEvent] { events ?? [] }
+
     enum CodingKeys: String, CodingKey {
         case date
+        case generatedAt = "generated_at"
+        case events
         case markdown
         case path
         case eventCount = "event_count"
@@ -122,13 +128,41 @@ struct PreferenceFeedbackRequest: Encodable {
     }
 }
 
+struct PreferenceUpdates: Decodable {
+    let includeCategories: [String]
+    let excludeCategories: [String]
+    let positiveSignals: [String]
+    let negativeSignals: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case includeCategories = "include_categories"
+        case excludeCategories = "exclude_categories"
+        case positiveSignals = "positive_signals"
+        case negativeSignals = "negative_signals"
+    }
+
+    var isEmpty: Bool {
+        includeCategories.isEmpty && excludeCategories.isEmpty
+            && positiveSignals.isEmpty && negativeSignals.isEmpty
+    }
+
+    // 人类可读："+演唱会 / +独立音乐 / −亲子"
+    var summary: String {
+        let plus = (includeCategories + positiveSignals).map { "+\($0)" }
+        let minus = (excludeCategories + negativeSignals).map { "−\($0)" }
+        return (plus + minus).joined(separator: " / ")
+    }
+}
+
 struct PreferenceFeedbackResponse: Decodable {
     let profile: PreferenceProfile?
+    let updates: PreferenceUpdates?
     let eventId: String?
     let rescoredEvents: Int?
 
     enum CodingKeys: String, CodingKey {
         case profile
+        case updates
         case eventId = "event_id"
         case rescoredEvents = "rescored_events"
     }

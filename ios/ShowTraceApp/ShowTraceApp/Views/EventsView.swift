@@ -177,15 +177,25 @@ struct EventsView: View {
         isLoading = true
         errorMessage = nil
         do {
-            // Category and search are filtered client-side (the API only filters by
-            // decision/type/city/source), so fetch a wide window to filter over.
-            let response = try await APIClient(settings: settings).fetchEvents(decision: selectedSegment, limit: 200)
+            // 未过期由服务端过滤（date_from=今天，含日期待定）；类目/搜索在客户端做，
+            // 故拉一个较大窗口供本地筛选。
+            let response = try await APIClient(settings: settings).fetchEvents(
+                decision: selectedSegment,
+                dateFrom: todayString,
+                limit: 200
+            )
             events = response.items
             total = response.total
         } catch {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+    }
+
+    private var todayString: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: Date())
     }
 }
 

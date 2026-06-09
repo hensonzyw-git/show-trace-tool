@@ -43,6 +43,7 @@ except ImportError:  # pragma: no cover - depends on optional browser deps
     DamaiSource = None
 from app.paths import CONFIG_PATH, FIXTURE_DIR, RAW_DIR, ROOT
 from app.preferences import get_current_interest_profile, score_events_for_interest
+from app.summary import build_daily_summary
 
 SOURCE_REGISTRY: dict[str, type] = {
     "showstart": ShowstartSource,
@@ -352,6 +353,16 @@ def _run_pipeline_body(
         )
     else:
         print("\n=== 本次未抽到任何结构化事件 ===")
+
+    # Rebuild today's 当日摘要 snapshot from the now-updated DB (keep + unexpired,
+    # score desc). Ties "每日更新" to the data refresh; failures here must not fail
+    # the run.
+    try:
+        snapshot = build_daily_summary()
+        print(f"[summary] 当日摘要快照已更新（{len(snapshot['event_ids'])} 条）")
+    except Exception as e:  # noqa: BLE001
+        stats.errors.append(f"summary: {e}")
+        print(f"[summary] 快照生成失败: {e}")
 
 
 def _build_tasks(

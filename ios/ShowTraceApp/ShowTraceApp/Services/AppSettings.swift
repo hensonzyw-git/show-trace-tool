@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import SwiftUI
 
 enum ThemeMode: String, CaseIterable, Identifiable {
@@ -39,7 +40,7 @@ final class AppSettings: ObservableObject {
     }
 
     @Published var apiToken: String {
-        didSet { UserDefaults.standard.set(apiToken, forKey: Keys.apiToken) }
+        didSet { KeychainStore.set(apiToken, account: Keys.apiToken) }
     }
 
     @Published var themeMode: ThemeMode {
@@ -50,7 +51,16 @@ final class AppSettings: ObservableObject {
         let savedBaseURL = UserDefaults.standard.string(forKey: Keys.baseURL)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         self.baseURL = savedBaseURL?.isEmpty == false ? savedBaseURL! : Self.productionBaseURL
-        self.apiToken = UserDefaults.standard.string(forKey: Keys.apiToken) ?? ""
+        if let keychainToken = KeychainStore.get(account: Keys.apiToken) {
+            self.apiToken = keychainToken
+        } else {
+            let legacyToken = UserDefaults.standard.string(forKey: Keys.apiToken) ?? ""
+            self.apiToken = legacyToken
+            if !legacyToken.isEmpty {
+                KeychainStore.set(legacyToken, account: Keys.apiToken)
+                UserDefaults.standard.removeObject(forKey: Keys.apiToken)
+            }
+        }
         let savedThemeMode = UserDefaults.standard.string(forKey: Keys.themeMode)
         self.themeMode = ThemeMode(rawValue: savedThemeMode ?? "") ?? .system
     }
@@ -71,5 +81,54 @@ final class AppSettings: ObservableObject {
         static let baseURL = "showTrace.baseURL"
         static let apiToken = "showTrace.apiToken"
         static let themeMode = "showTrace.themeMode"
+    }
+}
+
+private enum KeychainStore {
+    private static let service = "showTrace"
+
+    static func get(account: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+              let data = item as? Data else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
+    static func set(_ value: String, account: String) {
+        if value.isEmpty {
+            delete(account: account)
+            return
+        }
+        let data = Data(value.utf8)
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+        let attributes: [String: Any] = [kSecValueData as String: data]
+        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            var item = query
+            item[kSecValueData as String] = data
+            SecItemAdd(item as CFDictionary, nil)
+        }
+    }
+
+    private static func delete(account: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+        SecItemDelete(query as CFDictionary)
     }
 }

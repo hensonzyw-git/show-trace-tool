@@ -6,7 +6,7 @@ struct TodayView: View {
     @State private var events: [ShowEvent] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var showDigest = false
+    @State private var showMarkdownDigest = false
 
     var body: some View {
         NavigationStack {
@@ -37,8 +37,8 @@ struct TodayView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showDigest) {
-                DigestView()
+            .sheet(isPresented: $showMarkdownDigest) {
+                MarkdownDigestSheet(markdown: digest?.markdown ?? "")
             }
             .task {
                 await load()
@@ -65,40 +65,52 @@ struct TodayView: View {
     }
 
     private var summaryBanner: some View {
-        Button {
-            showDigest = true
-        } label: {
-            HStack(alignment: .center, spacing: 14) {
-                Text("\(summaryCount)")
-                    .font(.system(size: 38, weight: .heavy))
-                    .foregroundStyle(Color.showRadarAccent)
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.75)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("条关注演出")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(.primary)
-                    Text(summarySubtitle)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
+        Group {
+            if hasMarkdownDigest {
+                Button {
+                    showMarkdownDigest = true
+                } label: {
+                    summaryBannerContent(showsChevron: true)
                 }
-                Spacer(minLength: 0)
+                .buttonStyle(.plain)
+            } else {
+                summaryBannerContent(showsChevron: false)
+            }
+        }
+    }
+
+    private func summaryBannerContent(showsChevron: Bool) -> some View {
+        HStack(alignment: .center, spacing: 14) {
+            Text("\(summaryCount)")
+                .font(.system(size: 38, weight: .heavy))
+                .foregroundStyle(Color.showRadarAccent)
+                .monospacedDigit()
+                .minimumScaleFactor(0.75)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("条关注演出")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(.primary)
+                Text(summarySubtitle)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            Spacer(minLength: 0)
+            if showsChevron {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
-            .padding(16)
-            .background(summaryGradient, in: RoundedRectangle(cornerRadius: 18))
-            .overlay {
-                RoundedRectangle(cornerRadius: 18)
-                    .stroke(Color.primary.opacity(0.06), lineWidth: 0.5)
-            }
-            .padding(.horizontal, 20)
         }
-        .buttonStyle(.plain)
+        .padding(16)
+        .background(summaryGradient, in: RoundedRectangle(cornerRadius: 18))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 0.5)
+        }
+        .padding(.horizontal, 20)
     }
 
     private var soonSection: some View {
@@ -153,8 +165,8 @@ struct TodayView: View {
         Array(events.sorted(by: compareEventsByDate).prefix(5))
     }
 
-    // Headline number describes the list actually shown below (the keep list),
-    // so the count and the "为你关注" section can't contradict each other.
+    // Headline number = the snapshot feed shown below, so it never contradicts
+    // the "为你关注" list.
     private var summaryCount: Int {
         events.count
     }
@@ -162,10 +174,12 @@ struct TodayView: View {
     private var summarySubtitle: String {
         let sources = Set(events.compactMap { EventSource.label(for: $0.source) }).sorted().prefix(3)
         let sourceText = sources.isEmpty ? "多个来源" : sources.joined(separator: " / ")
-        if let todayCount = digest?.eventCount {
-            return "今日新增 \(todayCount) 条 · 精选自 \(sourceText)"
-        }
-        return "按你的口味精选 · 来自 \(sourceText)"
+        return "今日为你精选 · 来自 \(sourceText)"
+    }
+
+    private var hasMarkdownDigest: Bool {
+        guard let markdown = digest?.markdown else { return false }
+        return !markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var summaryGradient: LinearGradient {
@@ -191,19 +205,41 @@ struct TodayView: View {
         guard settings.isConfigured else { return }
         isLoading = true
         errorMessage = nil
-        let client = APIClient(settings: settings)
-        // The digest is optional (it 404s before today's digest is generated),
-        // so fetch it best-effort and only treat the events fetch as fatal.
-        async let digestResponse = try? client.fetchDigest()
-        async let eventsResponse = client.fetchEvents(decision: .keep, limit: 80)
         do {
-            let fetchedEvents = try await eventsResponse
-            events = fetchedEvents.items
-            digest = await digestResponse
+            // 当日摘要是后端每日快照：feed 直接取 digest.events（已按兴趣分降序）。
+            let fetched = try await APIClient(settings: settings).fetchDigest()
+            digest = fetched
+            events = fetched.feedEvents
+        } catch APIError.badStatus(404, _) {
+            // 当天/前一日都还没有快照 → 空态，不报错。
+            digest = nil
+            events = []
         } catch {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+    }
+}
+
+private struct MarkdownDigestSheet: View {
+    let markdown: String
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(markdownText(markdown))
+                    .font(.body)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+            .navigationTitle("完整摘要")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private func markdownText(_ markdown: String) -> AttributedString {
+        (try? AttributedString(markdown: markdown)) ?? AttributedString(markdown)
     }
 }
 

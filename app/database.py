@@ -62,7 +62,8 @@ def list_events(
         where.append("scores.decision = ?")
         params.append(interest_decision)
     if date_from:
-        where.append("event_date >= ?")
+        # 未过期 = 日期 >= date_from；event_date 为空视为"待定"，保留。
+        where.append("(event_date >= ? OR event_date IS NULL)")
         params.append(date_from)
     if date_to:
         where.append("event_date <= ?")
@@ -121,7 +122,7 @@ def count_events(
         where.append("scores.decision = ?")
         params.append(interest_decision)
     if date_from:
-        where.append("event_date >= ?")
+        where.append("(event_date >= ? OR event_date IS NULL)")
         params.append(date_from)
     if date_to:
         where.append("event_date <= ?")
@@ -140,6 +141,37 @@ def count_events(
             params,
         ).fetchone()
     return int(row["count"] if row else 0)
+
+
+def get_events_by_ids(ids: list[str]) -> list[dict[str, Any]]:
+    """Fetch events (with interest fields) by id, preserving the given order.
+
+    Missing ids are silently dropped. Used by the daily summary snapshot, which
+    persists an ordered list of event ids.
+    """
+    if not ids or not database_exists():
+        return []
+    placeholders = ",".join("?" for _ in ids)
+    with _conn() as c:
+        rows = c.execute(
+            f"""
+            SELECT
+                events.*,
+                scores.decision AS interest_decision,
+                scores.match_score AS interest_match_score,
+                scores.interest_category AS interest_category,
+                scores.reason AS interest_reason,
+                scores.uncertainty AS interest_uncertainty,
+                scores.scored_at AS interest_scored_at
+            FROM events
+            LEFT JOIN event_interest_scores AS scores
+                ON scores.event_id = events.id
+            WHERE events.id IN ({placeholders})
+            """,
+            ids,
+        ).fetchall()
+    by_id = {row["id"]: dict(row) for row in rows}
+    return [by_id[i] for i in ids if i in by_id]
 
 
 def read_digest(day: str | None = None) -> dict[str, Any] | None:

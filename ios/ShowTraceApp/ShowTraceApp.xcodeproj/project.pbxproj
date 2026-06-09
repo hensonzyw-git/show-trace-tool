@@ -15,7 +15,6 @@
 		110000000000000000000006 /* EventsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000106 /* EventsView.swift */; };
 		110000000000000000000007 /* EventCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000107 /* EventCard.swift */; };
 		110000000000000000000008 /* DigestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000108 /* DigestView.swift */; };
-		110000000000000000000009 /* SubscriptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000109 /* SubscriptionView.swift */; };
 		11000000000000000000000A /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000010A /* PreferencesView.swift */; };
 		11000000000000000000000B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000010B /* SettingsView.swift */; };
 		11000000000000000000000C /* SharedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000010C /* SharedViews.swift */; };
@@ -32,7 +31,6 @@
 		110000000000000000000106 /* EventsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsView.swift; sourceTree = "<group>"; };
 		110000000000000000000107 /* EventCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCard.swift; sourceTree = "<group>"; };
 		110000000000000000000108 /* DigestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigestView.swift; sourceTree = "<group>"; };
-		110000000000000000000109 /* SubscriptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionView.swift; sourceTree = "<group>"; };
 		11000000000000000000010A /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
 		11000000000000000000010B /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		11000000000000000000010C /* SharedViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedViews.swift; sourceTree = "<group>"; };
@@ -106,7 +104,6 @@
 				110000000000000000000106 /* EventsView.swift */,
 				110000000000000000000107 /* EventCard.swift */,
 				110000000000000000000108 /* DigestView.swift */,
-				110000000000000000000109 /* SubscriptionView.swift */,
 				11000000000000000000010A /* PreferencesView.swift */,
 				11000000000000000000010B /* SettingsView.swift */,
 				110000000000000000000110 /* RunsView.swift */,
@@ -191,7 +188,6 @@
 				110000000000000000000006 /* EventsView.swift in Sources */,
 				110000000000000000000007 /* EventCard.swift in Sources */,
 				110000000000000000000008 /* DigestView.swift in Sources */,
-				110000000000000000000009 /* SubscriptionView.swift in Sources */,
 				11000000000000000000000A /* PreferencesView.swift in Sources */,
 				11000000000000000000000B /* SettingsView.swift in Sources */,
 				11000000000000000000000C /* SharedViews.swift in Sources */,

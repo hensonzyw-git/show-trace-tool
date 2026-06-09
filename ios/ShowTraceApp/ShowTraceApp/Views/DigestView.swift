@@ -88,7 +88,7 @@ private struct DigestCard: View {
 
     var body: some View {
         DisclosureGroup(isExpanded: isExpanded) {
-            Text(markdownText(digest.markdown))
+            Text(markdownText(digest.markdown ?? ""))
                 .font(.body)
                 .textSelection(.enabled)
                 .padding(.top, 10)

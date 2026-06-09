@@ -31,14 +31,19 @@ struct APIClient {
         self.session = session
     }
 
-    func fetchEvents(decision: InterestSegment, limit: Int = 50) async throws -> EventsResponse {
-        try await get(
-            "/api/events",
-            queryItems: [
-                URLQueryItem(name: "interest_decision", value: decision.rawValue),
-                URLQueryItem(name: "limit", value: String(limit))
-            ]
-        )
+    func fetchEvents(
+        decision: InterestSegment,
+        dateFrom: String? = nil,
+        limit: Int = 50
+    ) async throws -> EventsResponse {
+        var items = [
+            URLQueryItem(name: "interest_decision", value: decision.rawValue),
+            URLQueryItem(name: "limit", value: String(limit))
+        ]
+        if let dateFrom, !dateFrom.isEmpty {
+            items.append(URLQueryItem(name: "date_from", value: dateFrom))
+        }
+        return try await get("/api/events", queryItems: items)
     }
 
     func fetchDigest() async throws -> DigestResponse {

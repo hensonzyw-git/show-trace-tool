@@ -6,7 +6,6 @@ struct SettingsView: View {
     @State private var runs: [RunItem] = []
     @State private var testMessage: String?
     @State private var isTesting = false
-    @State private var showSources = false
 
     var body: some View {
         NavigationStack {
@@ -31,16 +30,6 @@ struct SettingsView: View {
                                     subtitle: latestRunSubtitle,
                                     accentIcon: true,
                                     trailing: AnyView(runStatusView)
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            SettingsDivider(hasIcon: true)
-                            Button {
-                                showSources = true
-                            } label: {
-                                SettingsRow(
-                                    icon: "star",
-                                    title: "管理数据源"
                                 )
                             }
                             .buttonStyle(.plain)
@@ -107,9 +96,6 @@ struct SettingsView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showSources) {
-                SubscriptionView()
-            }
             .task {
                 await loadRuns()
             }

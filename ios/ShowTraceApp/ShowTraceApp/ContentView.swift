@@ -21,12 +21,6 @@ struct ContentView: View {
                 }
                 .tag(AppTab.events)
 
-            SubscriptionView()
-                .tabItem {
-                    Label("订阅范围", systemImage: "star")
-                }
-                .tag(AppTab.subscription)
-
             PreferencesView()
                 .tabItem {
                     Label("偏好管理", systemImage: "slider.horizontal.3")
@@ -52,7 +46,6 @@ struct ContentView: View {
 private enum AppTab {
     case today
     case events
-    case subscription
     case preferences
     case settings
 }
