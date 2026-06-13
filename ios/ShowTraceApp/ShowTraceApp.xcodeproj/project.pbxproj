@@ -20,6 +20,7 @@
 		11000000000000000000000C /* SharedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000010C /* SharedViews.swift */; };
 		11000000000000000000000D /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000010F /* TodayView.swift */; };
 		11000000000000000000000E /* RunsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000110 /* RunsView.swift */; };
+		11000000000000000000000F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000111 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -38,6 +39,7 @@
 		11000000000000000000010E /* ShowTraceApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShowTraceApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		11000000000000000000010F /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
 		110000000000000000000110 /* RunsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunsView.swift; sourceTree = "<group>"; };
+		110000000000000000000111 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -67,6 +69,7 @@
 				110000000000000000000304 /* Models */,
 				110000000000000000000305 /* Services */,
 				110000000000000000000306 /* Views */,
+				110000000000000000000111 /* Assets.xcassets */,
 				11000000000000000000010D /* Info.plist */,
 			);
 			path = ShowTraceApp;
@@ -170,6 +173,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				11000000000000000000000F /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -316,13 +320,14 @@
 		110000000000000000000803 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = YGQ9DJZ963;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShowTraceApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = "V0.1 beta";
 				PRODUCT_BUNDLE_IDENTIFIER = com.henson.showtrace;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -335,13 +340,14 @@
 		110000000000000000000804 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = YGQ9DJZ963;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShowTraceApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = "V0.1 beta";
 				PRODUCT_BUNDLE_IDENTIFIER = com.henson.showtrace;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
