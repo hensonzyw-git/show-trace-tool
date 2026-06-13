@@ -159,12 +159,14 @@ struct PreferenceFeedbackResponse: Decodable {
     let updates: PreferenceUpdates?
     let eventId: String?
     let rescoredEvents: Int?
+    let rescoreScheduled: Bool?
 
     enum CodingKeys: String, CodingKey {
         case profile
         case updates
         case eventId = "event_id"
         case rescoredEvents = "rescored_events"
+        case rescoreScheduled = "rescore_scheduled"
     }
 }
 

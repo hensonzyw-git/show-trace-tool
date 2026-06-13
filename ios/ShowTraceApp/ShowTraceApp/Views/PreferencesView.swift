@@ -282,8 +282,8 @@ struct PreferencesView: View {
                 PreferenceFeedbackRequest(
                     feedback: text,
                     eventId: nil,
-                    rescoreExisting: false,
-                    rescoreLimit: 0
+                    rescoreExisting: true,
+                    rescoreLimit: 500
                 )
             )
             if let nextProfile = response.profile {
@@ -292,6 +292,7 @@ struct PreferencesView: View {
             feedbackResult = FeedbackResult(
                 updates: response.updates,
                 rescoredEvents: response.rescoredEvents ?? 0,
+                rescoreScheduled: response.rescoreScheduled ?? false,
                 fallbackMessage: nil
             )
             feedback = ""
@@ -299,6 +300,7 @@ struct PreferencesView: View {
             feedbackResult = FeedbackResult(
                 updates: nil,
                 rescoredEvents: 0,
+                rescoreScheduled: false,
                 fallbackMessage: preferenceErrorMessage(error)
             )
         }
@@ -354,6 +356,7 @@ struct PreferencesView: View {
 private struct FeedbackResult {
     let updates: PreferenceUpdates?
     let rescoredEvents: Int
+    let rescoreScheduled: Bool
     let fallbackMessage: String?
 }
 
@@ -381,6 +384,9 @@ private struct FeedbackResultRow: View {
                     }
                     if result.rescoredEvents > 0 {
                         Text("已重打分 \(result.rescoredEvents) 条")
+                            .foregroundStyle(.tertiary)
+                    } else if result.rescoreScheduled {
+                        Text("正在后台重排，稍后下拉刷新")
                             .foregroundStyle(.tertiary)
                     } else {
                         Text("偏好已保存")

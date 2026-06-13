@@ -127,7 +127,7 @@ class ImportEventsRequest(BaseModel):
 class PreferenceFeedbackRequest(BaseModel):
     feedback: str = Field(min_length=1, max_length=2000)
     event_id: str | None = None
-    rescore_existing: bool = False
+    rescore_existing: bool = True
     rescore_limit: int = Field(default=500, ge=0, le=500)
 
 
@@ -236,14 +236,25 @@ def get_preferences(_: None = Depends(require_api_token)) -> dict[str, Any]:
 @app.post("/api/preferences/feedback")
 def update_preferences_from_feedback(
     payload: PreferenceFeedbackRequest,
+    background_tasks: BackgroundTasks,
     _: None = Depends(require_api_token),
 ) -> dict[str, Any]:
+    # parse_preference_feedback persists the new profile synchronously, so the
+    # response reflects the profile change immediately. Rescoring existing events
+    # is LLM-heavy (up to rescore_limit calls) and is decoupled from the profile
+    # update: schedule it as a background task and return right away instead of
+    # blocking the request — and timing out — until every event is re-scored.
     result = parse_preference_feedback(payload.feedback)
     result["event_id"] = payload.event_id
-    result["rescored_events"] = _rescore_existing_events(
-        limit=payload.rescore_limit,
-        enabled=payload.rescore_existing,
-    )
+    rescore_scheduled = payload.rescore_existing and payload.rescore_limit > 0
+    if rescore_scheduled:
+        background_tasks.add_task(
+            _rescore_existing_events,
+            limit=payload.rescore_limit,
+            enabled=True,
+        )
+    result["rescored_events"] = 0
+    result["rescore_scheduled"] = rescore_scheduled
     return result
 
 
