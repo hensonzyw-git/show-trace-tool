@@ -32,14 +32,14 @@ struct APIClient {
     }
 
     func fetchEvents(
-        decision: InterestSegment,
+        decision: InterestSegment? = nil,
         dateFrom: String? = nil,
         limit: Int = 50
     ) async throws -> EventsResponse {
-        var items = [
-            URLQueryItem(name: "interest_decision", value: decision.rawValue),
-            URLQueryItem(name: "limit", value: String(limit))
-        ]
+        var items = [URLQueryItem(name: "limit", value: String(limit))]
+        if let decision {
+            items.append(URLQueryItem(name: "interest_decision", value: decision.rawValue))
+        }
         if let dateFrom, !dateFrom.isEmpty {
             items.append(URLQueryItem(name: "date_from", value: dateFrom))
         }

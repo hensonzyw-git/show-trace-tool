@@ -239,7 +239,7 @@ enum InterestSegment: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .keep:
-            return "推荐"
+            return "关注"
         case .maybe:
             return "待观察"
         case .filter:

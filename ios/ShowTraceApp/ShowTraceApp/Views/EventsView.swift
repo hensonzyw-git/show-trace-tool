@@ -6,7 +6,6 @@ struct EventsView: View {
     @State private var selectedCategory = "全部"
     @State private var searchText = ""
     @State private var events: [ShowEvent] = []
-    @State private var total = 0
     @State private var isLoading = false
     @State private var errorMessage: String?
 
@@ -14,8 +13,9 @@ struct EventsView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 header
-                categoryFilter
                 tasteFilter
+                categoryFilter
+                countLine
 
                 Group {
                     if isLoading && events.isEmpty {
@@ -28,16 +28,16 @@ struct EventsView: View {
                     } else if filteredEvents.isEmpty {
                         EmptyStateView(title: emptyStateTitle, systemImage: "tray")
                     } else {
-                        List(filteredEvents) { event in
-                            EventCard(event: event) {
-                                Task { await load() }
+                        ScrollView {
+                            LazyVStack(spacing: 11) {
+                                ForEach(filteredEvents) { event in
+                                    EventCard(event: event)
+                                }
                             }
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+                            .padding(.horizontal, 20)
+                            .padding(.top, 8)
+                            .padding(.bottom, 92)
                         }
-                        .listStyle(.plain)
-                        .scrollContentBackground(.hidden)
                         .background(Color.showRadarScreenBackground)
                         .refreshable {
                             await load()
@@ -50,26 +50,7 @@ struct EventsView: View {
             // chromeless so it isn't shown twice.
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem {
-                    Button {
-                        Task { await load() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .disabled(isLoading)
-                }
-            }
-            .safeAreaInset(edge: .bottom) {
-                if total > 0 {
-                    Text("共 \(total) 条")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                        .background(.bar)
-                }
-            }
+            .toolbar(.hidden, for: .navigationBar)
             .task {
                 await load()
             }
@@ -81,6 +62,7 @@ struct EventsView: View {
             HStack {
                 Text("全部演出")
                     .font(.system(size: 32, weight: .heavy))
+                    .tracking(-0.6)
                 Spacer()
             }
 
@@ -111,6 +93,20 @@ struct EventsView: View {
         .padding(.bottom, 6)
     }
 
+    private var tasteFilter: some View {
+        Picker("兴趣", selection: $selectedSegment) {
+            ForEach(InterestSegment.allCases) { segment in
+                Text(segment.title).tag(segment)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal, 20)
+        .padding(.top, 6)
+        .onChange(of: selectedSegment) {
+            Task { await load() }
+        }
+    }
+
     private var categoryFilter: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
@@ -121,29 +117,25 @@ struct EventsView: View {
                 }
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 8)
+            .padding(.top, 12)
+            .padding(.bottom, 2)
         }
     }
 
-    private var tasteFilter: some View {
-        HStack(spacing: 8) {
-            Text("口味")
-                .font(.system(size: 12.5))
-                .foregroundStyle(.secondary)
-            ForEach(InterestSegment.allCases) { segment in
-                FilterPill(title: segment.title, isSelected: selectedSegment == segment, accentFill: false) {
-                    selectedSegment = segment
-                    Task { await load() }
-                }
-            }
-            Spacer(minLength: 8)
+    private var countLine: some View {
+        HStack {
             Text("\(filteredEvents.count) 场 · 按日期")
                 .font(.system(size: 12.5))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+            Spacer()
+            Text("仅未过期")
+                .font(.system(size: 12.5))
+                .foregroundStyle(.tertiary)
         }
         .padding(.horizontal, 20)
-        .padding(.bottom, 8)
+        .padding(.top, 10)
+        .padding(.bottom, 2)
     }
 
     private var filteredEvents: [ShowEvent] {
@@ -185,7 +177,6 @@ struct EventsView: View {
                 limit: 200
             )
             events = response.items
-            total = response.total
         } catch {
             errorMessage = error.localizedDescription
         }

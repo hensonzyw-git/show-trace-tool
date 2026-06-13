@@ -7,6 +7,7 @@ struct TodayView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showMarkdownDigest = false
+    @State private var isLiveFallback = false
 
     var body: some View {
         NavigationStack {
@@ -23,8 +24,8 @@ struct TodayView: View {
                         VStack(alignment: .leading, spacing: 0) {
                             header
                             summaryBanner
-                            soonSection
-                            focusSection
+                            digestFeedSection
+                            footerHint
                         }
                         .padding(.bottom, 92)
                     }
@@ -55,6 +56,7 @@ struct TodayView: View {
                     .tracking(0.3)
                 Text("今日雷达")
                     .font(.system(size: 32, weight: .heavy))
+                    .tracking(-0.6)
                     .foregroundStyle(.primary)
             }
             Spacer()
@@ -82,26 +84,29 @@ struct TodayView: View {
     private func summaryBannerContent(showsChevron: Bool) -> some View {
         HStack(alignment: .center, spacing: 14) {
             Text("\(summaryCount)")
-                .font(.system(size: 38, weight: .heavy))
+                .font(.system(size: 36, weight: .heavy))
                 .foregroundStyle(Color.showRadarAccent)
                 .monospacedDigit()
                 .minimumScaleFactor(0.75)
 
             VStack(alignment: .leading, spacing: 5) {
-                Text("条关注演出")
-                    .font(.system(size: 17, weight: .bold))
+                Text("场高分演出")
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.primary)
                 Text(summarySubtitle)
-                    .font(.system(size: 13))
+                    .font(.system(size: 12.5))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
             }
             Spacer(minLength: 0)
             if showsChevron {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 3) {
+                    Text("完整摘要")
+                    Image(systemName: "chevron.right")
+                }
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(Color.showRadarAccent)
             }
         }
         .padding(16)
@@ -113,47 +118,17 @@ struct TodayView: View {
         .padding(.horizontal, 20)
     }
 
-    private var soonSection: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text("⚡ 最近就开始")
-                .font(.system(size: 19, weight: .bold))
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
-
-            if topPicks.isEmpty {
-                EmptyMiniState(title: "暂无近期关注演出")
-                    .padding(.horizontal, 20)
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 11) {
-                        ForEach(topPicks) { event in
-                            TopPickCard(event: event)
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 2)
-                }
-            }
-        }
-    }
-
-    private var focusSection: some View {
+    private var digestFeedSection: some View {
         VStack(alignment: .leading, spacing: 11) {
-            Text("为你关注")
-                .font(.system(size: 19, weight: .bold))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
+            ShowRadarSectionLabel(title: "今日筛选", trailing: "按兴趣分")
 
-            if events.isEmpty {
-                EmptyMiniState(title: "暂无关注演出")
+            if digestEvents.isEmpty {
+                EmptyMiniState(title: "暂无高分演出")
                     .padding(.horizontal, 20)
             } else {
                 LazyVStack(spacing: 11) {
-                    ForEach(events.prefix(8)) { event in
-                        EventCard(event: event) {
-                            Task { await load() }
-                        }
+                    ForEach(digestEvents.prefix(8)) { event in
+                        EventCard(event: event)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -161,20 +136,38 @@ struct TodayView: View {
         }
     }
 
-    private var topPicks: [ShowEvent] {
-        Array(events.sorted(by: compareEventsByDate).prefix(5))
+    private var footerHint: some View {
+        Text("下拉刷新 · 每日快照不实时更新")
+            .font(.system(size: 12.5))
+            .foregroundStyle(.tertiary)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 16)
+    }
+
+    private var digestEvents: [ShowEvent] {
+        guard isLiveFallback else { return events }
+        return events.sorted { lhs, rhs in
+            let leftScore = lhs.interestMatchScore ?? 0
+            let rightScore = rhs.interestMatchScore ?? 0
+            if leftScore != rightScore {
+                return leftScore > rightScore
+            }
+            return compareEventsByDate(lhs, rhs)
+        }
     }
 
     // Headline number = the snapshot feed shown below, so it never contradicts
-    // the "为你关注" list.
+    // the "今日筛选" list.
     private var summaryCount: Int {
-        events.count
+        digestEvents.count
     }
 
     private var summarySubtitle: String {
-        let sources = Set(events.compactMap { EventSource.label(for: $0.source) }).sorted().prefix(3)
+        let sources = Set(digestEvents.compactMap { EventSource.label(for: $0.source) }).sorted().prefix(3)
         let sourceText = sources.isEmpty ? "多个来源" : sources.joined(separator: " / ")
-        return "今日为你精选 · 来自 \(sourceText)"
+        let generatedAt = digest?.generatedAt?.isEmpty == false ? " · \(digest!.generatedAt!) 快照" : ""
+        let prefix = isLiveFallback ? "实时列表" : "今日新增 \(events.count) 条"
+        return "\(prefix) · 来源 \(sourceText)\(generatedAt)"
     }
 
     private var hasMarkdownDigest: Bool {
@@ -210,14 +203,35 @@ struct TodayView: View {
             let fetched = try await APIClient(settings: settings).fetchDigest()
             digest = fetched
             events = fetched.feedEvents
+            isLiveFallback = false
         } catch APIError.badStatus(404, _) {
-            // 当天/前一日都还没有快照 → 空态，不报错。
-            digest = nil
-            events = []
+            // 摘要快照缺失时，不让首页空掉；回退到实时 keep 列表。
+            do {
+                digest = nil
+                events = try await fetchFallbackEvents()
+                isLiveFallback = true
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+    }
+
+    private func fetchFallbackEvents() async throws -> [ShowEvent] {
+        let response = try await APIClient(settings: settings).fetchEvents(
+            decision: .keep,
+            dateFrom: todayQueryString,
+            limit: 50
+        )
+        return response.items
+    }
+
+    private var todayQueryString: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: Date())
     }
 }
 
@@ -236,83 +250,11 @@ private struct MarkdownDigestSheet: View {
             .navigationTitle("完整摘要")
             .navigationBarTitleDisplayMode(.inline)
         }
+        .presentationDetents([.medium, .large])
     }
 
     private func markdownText(_ markdown: String) -> AttributedString {
         (try? AttributedString(markdown: markdown)) ?? AttributedString(markdown)
-    }
-}
-
-private struct TopPickCard: View {
-    let event: ShowEvent
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            poster
-
-            VStack(alignment: .leading, spacing: 7) {
-                HStack(alignment: .center) {
-                    Text(category)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.showRadarAccent)
-                    Spacer(minLength: 8)
-                    Text(scoreText)
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(Color.showRadarAccent)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.showRadarAccent.opacity(0.12), in: Capsule())
-                }
-
-                Text(event.title)
-                    .font(.system(size: 14.5, weight: .bold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-                    .frame(minHeight: 36, alignment: .topLeading)
-
-                Label(event.eventDate ?? "日期待定", systemImage: "calendar")
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            .padding(12)
-        }
-        .frame(width: 210)
-        .background(Color.showRadarCardBackground, in: RoundedRectangle(cornerRadius: 18))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(Color.primary.opacity(0.06), lineWidth: 0.5)
-        }
-        .shadow(color: .black.opacity(0.05), radius: 16, x: 0, y: 8)
-    }
-
-    private var poster: some View {
-        RoundedRectangle(cornerRadius: 12)
-            .fill(
-                LinearGradient(
-                    colors: EventCategory.posterColors(for: category),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .frame(height: 112)
-            .overlay {
-                Image(systemName: EventCategory.icon(for: category))
-                    .font(.system(size: 28))
-                    .foregroundStyle(.primary.opacity(0.42))
-            }
-            .padding(6)
-    }
-
-    private var category: String {
-        EventCategory.resolved(for: event)
-    }
-
-    private var scoreText: String {
-        if let score = event.interestMatchScore {
-            return "\(score)"
-        }
-        return "关注"
     }
 }
 

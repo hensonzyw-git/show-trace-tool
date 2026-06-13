@@ -55,7 +55,7 @@ struct SettingsView: View {
                                 Button {
                                     settings.useProductionServer()
                                 } label: {
-                                    Label("使用服务器地址", systemImage: "server.rack")
+                                    Label("使用生产地址", systemImage: "server.rack")
                                 }
                                 Spacer()
                                 Button {
@@ -89,6 +89,11 @@ struct SettingsView: View {
                             )
                         }
                     }
+                    Text("版本号读自 Bundle · 个人工具 · 无账号体系")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.tertiary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 18)
                 }
                 .padding(.bottom, 92)
             }
