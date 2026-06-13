@@ -127,7 +127,7 @@ class ImportEventsRequest(BaseModel):
 class PreferenceFeedbackRequest(BaseModel):
     feedback: str = Field(min_length=1, max_length=2000)
     event_id: str | None = None
-    rescore_existing: bool = True
+    rescore_existing: bool = False
     rescore_limit: int = Field(default=500, ge=0, le=500)
 
 

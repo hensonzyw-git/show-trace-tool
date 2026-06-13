@@ -312,8 +312,7 @@ def _run_pipeline_body(
     # Duplicate dicts across tasks collapse to the same id (is_new=False on the
     # second hit), so each new event is scored exactly once — and we avoid
     # re-spending LLM tokens re-scoring events already in the DB. Profile-change
-    # rescoring is handled separately by /preferences/feedback and the backfill
-    # script.
+    # rescoring is handled separately by explicit rescore/backfill flows.
     new_to_score: list[tuple[str, dict[str, Any]]] = []
     for event in all_events:
         event_id, is_new = upsert_event(event)

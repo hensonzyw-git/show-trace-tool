@@ -282,8 +282,8 @@ struct PreferencesView: View {
                 PreferenceFeedbackRequest(
                     feedback: text,
                     eventId: nil,
-                    rescoreExisting: true,
-                    rescoreLimit: 500
+                    rescoreExisting: false,
+                    rescoreLimit: 0
                 )
             )
             if let nextProfile = response.profile {
@@ -379,8 +379,13 @@ private struct FeedbackResultRow: View {
                     ForEach(updates.excludeCategories + updates.negativeSignals, id: \.self) { item in
                         UpdateChip(prefix: "-", text: item, tone: .filter)
                     }
-                    Text("已重打分 \(result.rescoredEvents) 条")
-                        .foregroundStyle(.tertiary)
+                    if result.rescoredEvents > 0 {
+                        Text("已重打分 \(result.rescoredEvents) 条")
+                            .foregroundStyle(.tertiary)
+                    } else {
+                        Text("偏好已保存")
+                            .foregroundStyle(.tertiary)
+                    }
                 } else {
                     Text("没有识别到明确改动，可换种说法再试")
                         .foregroundStyle(.secondary)
