@@ -2,7 +2,8 @@
 
 import pytest
 
-from app.preferences import _score_event_with_rules, infer_event_category
+import db
+from app.preferences import parse_preference_feedback, _score_event_with_rules, infer_event_category
 
 
 def _profile(*, include=None, exclude=None):
@@ -14,6 +15,13 @@ def _profile(*, include=None, exclude=None):
         "negative_signals": [],
         "positive_signals": [],
     }
+
+
+def _use_temp_db(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "events.db")
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    db.init_db()
 
 
 class TestInferEventCategory:
@@ -57,3 +65,14 @@ class TestScoreWithRules:
         event = {"title": "x", "type": None}
         s = _score_event_with_rules(event, _profile())
         assert 0 <= s["match_score"] <= 100
+
+
+class TestParsePreferenceFeedback:
+    def test_lower_priority_and_artist_feedback_are_visible_updates(self, tmp_path, monkeypatch):
+        _use_temp_db(tmp_path, monkeypatch)
+
+        result = parse_preference_feedback("降低话剧优先级，增加艺人五月天")
+
+        assert result["updates"]["ranking_preferences"] == ["降低话剧优先级"]
+        assert result["updates"]["artists"] == ["五月天"]
+        assert "降低话剧优先级" in result["profile"]["ranking_preferences"]

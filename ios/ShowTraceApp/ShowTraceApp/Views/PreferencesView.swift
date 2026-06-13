@@ -289,6 +289,12 @@ struct PreferencesView: View {
             if let nextProfile = response.profile {
                 profile = nextProfile
             }
+            if let nextSubscription = response.subscription {
+                artists = nextSubscription.artists
+                city = nextSubscription.local.city ?? city
+                keywords = nextSubscription.local.keywords
+                sources = nextSubscription.sources.mapValues { $0.enabled ?? false }
+            }
             feedbackResult = FeedbackResult(
                 updates: response.updates,
                 rescoredEvents: response.rescoredEvents ?? 0,
@@ -378,6 +384,12 @@ private struct FeedbackResultRow: View {
                         .foregroundStyle(.secondary)
                     ForEach(updates.includeCategories + updates.positiveSignals, id: \.self) { item in
                         UpdateChip(prefix: "+", text: item, tone: .keep)
+                    }
+                    ForEach(updates.artists, id: \.self) { item in
+                        UpdateChip(prefix: "+", text: item, tone: .keep)
+                    }
+                    ForEach(updates.rankingPreferences, id: \.self) { item in
+                        UpdateChip(prefix: "~", text: item, tone: .maybe)
                     }
                     ForEach(updates.excludeCategories + updates.negativeSignals, id: \.self) { item in
                         UpdateChip(prefix: "-", text: item, tone: .filter)
@@ -482,12 +494,15 @@ private struct SourceToggleRow: View {
 
 private enum ProfileTone {
     case keep
+    case maybe
     case filter
 
     var foreground: Color {
         switch self {
         case .keep:
             return DecisionStyle.foreground("keep")
+        case .maybe:
+            return DecisionStyle.foreground("maybe")
         case .filter:
             return DecisionStyle.foreground("filter")
         }
@@ -497,6 +512,8 @@ private enum ProfileTone {
         switch self {
         case .keep:
             return DecisionStyle.background("keep")
+        case .maybe:
+            return DecisionStyle.background("maybe")
         case .filter:
             return DecisionStyle.background("filter")
         }

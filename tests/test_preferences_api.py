@@ -1,5 +1,12 @@
 import app.api as api
+import db
 from fastapi import BackgroundTasks
+
+
+def _use_temp_db(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "events.db")
+    db.init_db()
 
 
 def test_feedback_schedules_rescore_in_background(monkeypatch):
@@ -43,3 +50,37 @@ def test_feedback_can_opt_out_of_rescore(monkeypatch):
 
     assert response["rescore_scheduled"] is False
     assert bg.tasks == []
+
+
+def test_feedback_artist_updates_subscription(tmp_path, monkeypatch):
+    _use_temp_db(tmp_path, monkeypatch)
+    db.save_subscription(
+        {
+            "artists": ["周杰伦"],
+            "local": {"city": "上海", "keywords": []},
+            "sources": {},
+        }
+    )
+    monkeypatch.setattr(
+        api,
+        "parse_preference_feedback",
+        lambda feedback: {
+            "profile": {},
+            "updates": {
+                "include_categories": [],
+                "exclude_categories": [],
+                "ranking_preferences": ["降低话剧优先级"],
+                "artists": ["五月天"],
+                "positive_signals": [],
+                "negative_signals": [],
+            },
+            "parser": "test",
+        },
+    )
+
+    bg = BackgroundTasks()
+    payload = api.PreferenceFeedbackRequest(feedback="降低话剧优先级，增加艺人五月天")
+    response = api.update_preferences_from_feedback(payload, background_tasks=bg, _=None)
+
+    assert response["subscription"]["artists"] == ["周杰伦", "五月天"]
+    assert db.get_subscription()["artists"] == ["周杰伦", "五月天"]

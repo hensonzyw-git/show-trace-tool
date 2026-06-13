@@ -29,6 +29,7 @@ from db import (
     finish_run,
     get_event_interest_score,
     get_interest_profile,
+    get_subscription,
     get_unnotified_events,
     has_active_run,
     init_db,
@@ -246,6 +247,9 @@ def update_preferences_from_feedback(
     # blocking the request — and timing out — until every event is re-scored.
     result = parse_preference_feedback(payload.feedback)
     result["event_id"] = payload.event_id
+    subscription = _apply_feedback_subscription_updates(result.get("updates") or {})
+    if subscription:
+        result["subscription"] = subscription
     rescore_scheduled = payload.rescore_existing and payload.rescore_limit > 0
     if rescore_scheduled:
         background_tasks.add_task(
@@ -256,6 +260,27 @@ def update_preferences_from_feedback(
     result["rescored_events"] = 0
     result["rescore_scheduled"] = rescore_scheduled
     return result
+
+
+def _apply_feedback_subscription_updates(updates: dict[str, Any]) -> dict[str, Any] | None:
+    artists = updates.get("artists") or []
+    if not artists:
+        return None
+
+    subscription = get_subscription() or bootstrap_subscription()
+    current_artists = list(subscription.get("artists") or [])
+    changed = False
+    for artist in artists:
+        artist_name = str(artist).strip()
+        if artist_name and artist_name not in current_artists:
+            current_artists.append(artist_name)
+            changed = True
+
+    if not changed:
+        return subscription
+
+    subscription["artists"] = current_artists
+    return save_subscription(subscription)
 
 
 def _rescore_existing_events(*, limit: int, enabled: bool) -> int:

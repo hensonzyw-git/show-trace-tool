@@ -131,32 +131,49 @@ struct PreferenceFeedbackRequest: Encodable {
 struct PreferenceUpdates: Decodable {
     let includeCategories: [String]
     let excludeCategories: [String]
+    let rankingPreferences: [String]
+    let artists: [String]
     let positiveSignals: [String]
     let negativeSignals: [String]
 
     enum CodingKeys: String, CodingKey {
         case includeCategories = "include_categories"
         case excludeCategories = "exclude_categories"
+        case rankingPreferences = "ranking_preferences"
+        case artists
         case positiveSignals = "positive_signals"
         case negativeSignals = "negative_signals"
     }
 
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        includeCategories = try container.decodeIfPresent([String].self, forKey: .includeCategories) ?? []
+        excludeCategories = try container.decodeIfPresent([String].self, forKey: .excludeCategories) ?? []
+        rankingPreferences = try container.decodeIfPresent([String].self, forKey: .rankingPreferences) ?? []
+        artists = try container.decodeIfPresent([String].self, forKey: .artists) ?? []
+        positiveSignals = try container.decodeIfPresent([String].self, forKey: .positiveSignals) ?? []
+        negativeSignals = try container.decodeIfPresent([String].self, forKey: .negativeSignals) ?? []
+    }
+
     var isEmpty: Bool {
         includeCategories.isEmpty && excludeCategories.isEmpty
+            && rankingPreferences.isEmpty && artists.isEmpty
             && positiveSignals.isEmpty && negativeSignals.isEmpty
     }
 
     // 人类可读："+演唱会 / +独立音乐 / −亲子"
     var summary: String {
-        let plus = (includeCategories + positiveSignals).map { "+\($0)" }
+        let plus = (includeCategories + positiveSignals + artists).map { "+\($0)" }
+        let rank = rankingPreferences.map { "~\($0)" }
         let minus = (excludeCategories + negativeSignals).map { "−\($0)" }
-        return (plus + minus).joined(separator: " / ")
+        return (plus + rank + minus).joined(separator: " / ")
     }
 }
 
 struct PreferenceFeedbackResponse: Decodable {
     let profile: PreferenceProfile?
     let updates: PreferenceUpdates?
+    let subscription: Subscription?
     let eventId: String?
     let rescoredEvents: Int?
     let rescoreScheduled: Bool?
@@ -164,6 +181,7 @@ struct PreferenceFeedbackResponse: Decodable {
     enum CodingKeys: String, CodingKey {
         case profile
         case updates
+        case subscription
         case eventId = "event_id"
         case rescoredEvents = "rescored_events"
         case rescoreScheduled = "rescore_scheduled"

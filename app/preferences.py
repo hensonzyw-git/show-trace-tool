@@ -37,6 +37,8 @@ NEGATIVE_MARKERS = [
     "先不要",
 ]
 POSITIVE_MARKERS = ["要", "想看", "关注", "多推荐", "保留", "优先", "看看", "需要"]
+LOWER_PRIORITY_MARKERS = ["降低", "下调", "减少", "少推荐", "少一点", "低优先级"]
+ARTIST_ADD_PATTERN = re.compile(r"(?:增加|添加|新增|关注)\s*(?:艺人|歌手|乐队)?\s*([\w\u4e00-\u9fff·・.\- ]+)")
 ALLOWED_DECISIONS = {"keep", "maybe", "filter"}
 ALLOWED_UNCERTAINTY = {"low", "medium", "high"}
 LLM_MODEL = os.environ.get("SHOW_TRACE_PREFERENCES_MODEL", "deepseek-chat")
@@ -50,6 +52,8 @@ FEEDBACK_PROMPT = """你是一个个人活动推荐系统的偏好解析器。
 - 不要删除未被用户明确否定的偏好。
 - 用户说"不要/不想/屏蔽/过滤/暂不/先不要"时，相关类别进入 exclude_categories。
 - 用户说"想看/关注/多推荐/保留/优先/需要"时，相关类别进入 include_categories。
+- 用户说"降低/下调/减少 X 优先级"时，不要排除 X；把 "降低X优先级" 写入 ranking_preferences。
+- 用户说"增加/添加/关注 艺人/歌手/乐队 X"时，把艺人名写入 updates.artists，不要写入 profile。
 - 对无法归入明确类别但有偏好含义的短语，放入 positive_signals 或 negative_signals。
 - 保持列表去重。
 
@@ -72,6 +76,8 @@ FEEDBACK_PROMPT = """你是一个个人活动推荐系统的偏好解析器。
   "updates": {{
     "include_categories": [],
     "exclude_categories": [],
+    "ranking_preferences": [],
+    "artists": [],
     "positive_signals": [],
     "negative_signals": []
   }}
@@ -132,6 +138,8 @@ def parse_preference_feedback(
     if _llm_enabled():
         try:
             result = _parse_preference_feedback_with_llm(feedback, profile)
+            structural_updates = _apply_structural_feedback(feedback, result["profile"])
+            _merge_updates(result["updates"], structural_updates)
             saved = save_interest_profile(result["profile"])
             return {
                 "profile": saved,
@@ -152,15 +160,30 @@ def _parse_preference_feedback_with_rules(
 
     added_include: list[str] = []
     added_exclude: list[str] = []
+    added_ranking_preferences: list[str] = []
+    added_artists: list[str] = []
     added_positive_signals: list[str] = []
     added_negative_signals: list[str] = []
 
     for clause in clauses:
+        artists = _artists_in_text(clause)
+        if artists:
+            for artist in artists:
+                _add_unique(added_artists, artist)
+            continue
+
         categories = _categories_in_text(clause)
+        is_lower_priority = bool(categories) and _has_any(clause, LOWER_PRIORITY_MARKERS) and "优先" in clause
         is_negative = _has_any(clause, NEGATIVE_MARKERS)
         is_positive = _has_any(clause, POSITIVE_MARKERS) or not is_negative
 
         if categories:
+            if is_lower_priority:
+                for category in categories:
+                    preference = f"降低{category}优先级"
+                    _add_unique(profile["ranking_preferences"], preference)
+                    _add_unique(added_ranking_preferences, preference)
+                continue
             if is_negative:
                 for category in categories:
                     _add_unique(profile["exclude_categories"], category)
@@ -186,6 +209,8 @@ def _parse_preference_feedback_with_rules(
         "updates": {
             "include_categories": added_include,
             "exclude_categories": added_exclude,
+            "ranking_preferences": added_ranking_preferences,
+            "artists": added_artists,
             "positive_signals": added_positive_signals,
             "negative_signals": added_negative_signals,
         },
@@ -398,9 +423,37 @@ def _normalize_updates(updates: dict[str, Any]) -> dict[str, list[str]]:
     return {
         "include_categories": _unique_strings(updates.get("include_categories")),
         "exclude_categories": _unique_strings(updates.get("exclude_categories")),
+        "ranking_preferences": _unique_strings(updates.get("ranking_preferences")),
+        "artists": _unique_strings(updates.get("artists")),
         "positive_signals": _unique_strings(updates.get("positive_signals")),
         "negative_signals": _unique_strings(updates.get("negative_signals")),
     }
+
+
+def _apply_structural_feedback(feedback: str, profile: dict[str, Any]) -> dict[str, list[str]]:
+    updates = {
+        "ranking_preferences": [],
+        "artists": [],
+    }
+    clauses = [part.strip() for part in re.split(r"[，,。；;\n]+", feedback) if part.strip()]
+    for clause in clauses:
+        for artist in _artists_in_text(clause):
+            _add_unique(updates["artists"], artist)
+
+        categories = _categories_in_text(clause)
+        if categories and _has_any(clause, LOWER_PRIORITY_MARKERS) and "优先" in clause:
+            for category in categories:
+                preference = f"降低{category}优先级"
+                _add_unique(profile["ranking_preferences"], preference)
+                _add_unique(updates["ranking_preferences"], preference)
+    return updates
+
+
+def _merge_updates(target: dict[str, list[str]], source: dict[str, list[str]]) -> None:
+    for key, values in source.items():
+        existing = target.setdefault(key, [])
+        for value in values:
+            _add_unique(existing, value)
 
 
 def _normalize_score(raw: dict[str, Any]) -> dict[str, Any]:
@@ -466,6 +519,15 @@ def _matches_any_category(text: str, categories: list[str]) -> bool:
         if category in text or any(alias in text for alias in aliases):
             return True
     return False
+
+
+def _artists_in_text(text: str) -> list[str]:
+    found: list[str] = []
+    for match in ARTIST_ADD_PATTERN.finditer(text):
+        artist = match.group(1).strip(" ，,。；;")
+        if artist:
+            _add_unique(found, artist)
+    return found
 
 
 def _has_any(text: str, markers: list[str]) -> bool:
