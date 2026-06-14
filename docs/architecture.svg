@@ -1,0 +1,152 @@
+<svg viewBox="0 0 1180 720" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#5b6b7b"/>
+    </marker>
+    <style>
+      .tier  { fill:#f4f7fa; stroke:#d6dee6; stroke-width:1; rx:14; }
+      .tlabel{ fill:#8a97a5; font-size:13px; font-weight:700; letter-spacing:1px; }
+      .box   { fill:#ffffff; stroke:#c3ced9; stroke-width:1.5; rx:10; }
+      .boxhi { fill:#eef4ff; stroke:#7aa7ff; stroke-width:1.5; rx:10; }
+      .boxwarn{ fill:#fff7ec; stroke:#f0c075; stroke-width:1.5; rx:10; }
+      .title { fill:#1f2d3d; font-size:14px; font-weight:700; }
+      .sub   { fill:#6b7886; font-size:11.5px; }
+      .flow  { stroke:#5b6b7b; stroke-width:1.6; fill:none; marker-end:url(#arrow); }
+      .note  { fill:#9aa6b2; font-size:11px; font-style:italic; }
+      .badge { fill:#5b6b7b; font-size:10.5px; font-weight:700; }
+    </style>
+  </defs>
+
+  <!-- Title -->
+  <text x="40" y="42" font-size="22" font-weight="800" fill="#1f2d3d">Show Radar — System Architecture</text>
+  <text x="40" y="66" font-size="13.5" fill="#6b7886">Unstable sources → reliable data product. Daily batch · single-user · discovery layer (purchase happens back on source platforms).</text>
+
+  <!-- TIER 1: Collection -->
+  <rect class="tier" x="30"  y="92" width="230" height="540" rx="14"/>
+  <text class="tlabel" x="48" y="116">COLLECTION</text>
+
+  <rect class="box" x="50" y="134" width="190" height="96" rx="10"/>
+  <text class="title" x="66" y="160">HttpSource</text>
+  <text class="sub" x="66" y="180">秀动 Showstart · 摩天轮</text>
+  <text class="sub" x="66" y="197">SSR HTML / JSON API</text>
+  <text class="badge" x="66" y="217">☁ CLOUD · DAILY</text>
+
+  <rect class="boxwarn" x="50" y="246" width="190" height="96" rx="10"/>
+  <text class="title" x="66" y="272">BrowserSource</text>
+  <text class="sub" x="66" y="292">大麦 Damai (anti-bot)</text>
+  <text class="sub" x="66" y="309">daily Chrome + assisted</text>
+  <text class="badge" x="66" y="329">⌂ LOCAL · IMPORT API</text>
+
+  <rect class="box" x="50" y="358" width="190" height="92" rx="10" stroke-dasharray="5 4"/>
+  <text class="title" x="66" y="384">AssistedSource</text>
+  <text class="sub" x="66" y="404">小红书 / 微博 (planned)</text>
+  <text class="sub" x="66" y="421">Computer Use capture</text>
+  <text class="note" x="66" y="439">not in main path</text>
+
+  <text class="note" x="50" y="478">Collection may be</text>
+  <text class="note" x="50" y="494">unstable — everything</text>
+  <text class="note" x="50" y="510">downstream must not.</text>
+
+  <!-- TIER 2: Processing -->
+  <rect class="tier" x="300" y="92" width="230" height="540" rx="14"/>
+  <text class="tlabel" x="318" y="116">PROCESSING</text>
+
+  <rect class="boxhi" x="320" y="150" width="190" height="118" rx="10"/>
+  <text class="title" x="336" y="178">LLM Extraction</text>
+  <text class="sub" x="336" y="199">DeepSeek (deepseek-chat)</text>
+  <text class="sub" x="336" y="216">messy HTML/JSON →</text>
+  <text class="sub" x="336" y="233">structured events</text>
+  <text class="sub" x="336" y="253">lxml parse · fixture mode</text>
+
+  <rect class="boxhi" x="320" y="300" width="190" height="118" rx="10"/>
+  <text class="title" x="336" y="328">Preference Scoring</text>
+  <text class="sub" x="336" y="349">DeepSeek taste model</text>
+  <text class="sub" x="336" y="366">keep / maybe / filter</text>
+  <text class="sub" x="336" y="383">NL feedback → re-rank</text>
+  <text class="sub" x="336" y="403">(async background task)</text>
+
+  <rect class="box" x="320" y="448" width="190" height="96" rx="10"/>
+  <text class="title" x="336" y="474">Daily Summary</text>
+  <text class="sub" x="336" y="494">frozen snapshot per day</text>
+  <text class="sub" x="336" y="511">keep + unexpired only</text>
+  <text class="sub" x="336" y="528">sorted by interest score</text>
+
+  <!-- TIER 3: Storage -->
+  <rect class="tier" x="570" y="92" width="210" height="540" rx="14"/>
+  <text class="tlabel" x="588" y="116">STORAGE</text>
+
+  <rect class="box" x="590" y="150" width="170" height="74" rx="10"/>
+  <text class="title" x="606" y="176">events</text>
+  <text class="sub" x="606" y="196">core fact table</text>
+  <text class="sub" x="606" y="212">dedup: sha256(type|</text>
+  <text class="sub" x="606" y="227" >artist|date|venue)[:16]</text>
+
+  <rect class="box" x="590" y="240" width="170" height="60" rx="10"/>
+  <text class="title" x="606" y="266">subscriptions</text>
+  <text class="sub" x="606" y="286">artists · cities · sources</text>
+
+  <rect class="box" x="590" y="316" width="170" height="60" rx="10"/>
+  <text class="title" x="606" y="342">runs</text>
+  <text class="sub" x="606" y="362">status · counts · errors</text>
+
+  <rect class="box" x="590" y="392" width="170" height="60" rx="10"/>
+  <text class="title" x="606" y="418">daily_digests</text>
+  <text class="sub" x="606" y="438">snapshot history</text>
+
+  <text class="sub" x="590" y="486" font-weight="700">SQLite</text>
+  <text class="note" x="590" y="504">(→ Postgres path</text>
+  <text class="note" x="590" y="520">designed, not migrated)</text>
+
+  <!-- TIER 4: Serving -->
+  <rect class="tier" x="820" y="92" width="190" height="300" rx="14"/>
+  <text class="tlabel" x="838" y="116">SERVING</text>
+
+  <rect class="boxhi" x="840" y="140" width="150" height="160" rx="10"/>
+  <text class="title" x="856" y="166">FastAPI</text>
+  <text class="sub" x="856" y="187">/health</text>
+  <text class="sub" x="856" y="204">/api/events</text>
+  <text class="sub" x="856" y="221">/api/digests</text>
+  <text class="sub" x="856" y="238">/api/subscriptions</text>
+  <text class="sub" x="856" y="255">/api/runs · /preferences</text>
+  <text class="sub" x="856" y="272">/api/events/import</text>
+  <text class="sub" x="856" y="289">token-protected</text>
+
+  <rect class="box" x="840" y="318" width="150" height="56" rx="10"/>
+  <text class="sub" x="856" y="340" font-weight="700" fill="#1f2d3d">Aliyun ECS</text>
+  <text class="sub" x="856" y="358">systemd·nginx·cron 10:00</text>
+
+  <!-- TIER 5: Client -->
+  <rect class="tier" x="1050" y="92" width="100" height="300" rx="14"/>
+  <text class="tlabel" x="1064" y="116">CLIENT</text>
+  <rect class="boxhi" x="1062" y="140" width="76" height="234" rx="12"/>
+  <text class="title" x="1078" y="168" font-size="13">iOS</text>
+  <text class="sub" x="1075" y="200">SwiftUI</text>
+  <text class="sub" x="1075" y="226">Today</text>
+  <text class="sub" x="1075" y="248">All</text>
+  <text class="sub" x="1075" y="270">Prefs</text>
+  <text class="sub" x="1075" y="292">Settings</text>
+  <text class="note" x="1070" y="330">NL taste</text>
+  <text class="note" x="1070" y="346">tuning</text>
+
+  <!-- Worker note bottom -->
+  <rect x="820" y="430" width="330" height="180" rx="14" fill="#f4f7fa" stroke="#d6dee6"/>
+  <text class="tlabel" x="838" y="456">DESIGN PRINCIPLES</text>
+  <text class="sub" x="838" y="480">• Pipeline, not "monitor" — daily batch is enough</text>
+  <text class="sub" x="838" y="500">• Decouple collection from extraction (fixtures)</text>
+  <text class="sub" x="838" y="520">• Hybrid cloud/local: easy sources cloud,</text>
+  <text class="sub" x="838" y="537">   hard sources assisted-local → import API</text>
+  <text class="sub" x="838" y="557">• Backend is the source of truth</text>
+  <text class="sub" x="838" y="577">• No detail-page scraping — link back to platform</text>
+  <text class="sub" x="838" y="597">• 4 wks · 39 commits · ~13.5k net LOC · 53 tests</text>
+
+  <!-- Flows -->
+  <path class="flow" d="M240 182 H300"/>
+  <path class="flow" d="M240 294 C275 294, 280 220, 318 210"/>
+  <path class="flow" d="M240 404 C275 404, 285 360, 318 360"/>
+  <path class="flow" d="M510 209 H590"/>
+  <path class="flow" d="M510 359 C545 359, 555 280, 588 270"/>
+  <path class="flow" d="M510 496 C545 496, 560 430, 588 430"/>
+  <path class="flow" d="M760 270 C795 270, 805 220, 840 215"/>
+  <path class="flow" d="M990 220 H1062"/>
+  <path class="flow" d="M915 300 V318" />
+</svg>

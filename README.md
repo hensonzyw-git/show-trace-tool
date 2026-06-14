@@ -13,6 +13,12 @@
 - **工程取舍**：稳定源上云自动跑，困难源留在本机登录态环境辅助采集，再统一同步入库。
 - **AI 协作经验**：项目中曾出现设计 agent 设计未实现功能、coding agent 跟着实现导致 App 崩掉的情况；后续通过回滚和 PRD 明确 4 Tab、无详情页、无推送、无假按钮等边界，避免跨 agent 乱发挥。
 
+## Architecture
+
+![Show Radar architecture](docs/architecture.svg)
+
+> 采集层允许不稳定，但采集之后的抽取、存储、摘要、客户端必须稳定。稳定源云端每日跑，困难源本机辅助采集再走 import API 同步。
+
 ## Product Snapshot
 
 ```text
@@ -37,6 +43,12 @@ iOS App / Markdown digest / macOS 通知
 - 浏览全部未过期演出，按分类、兴趣决策、搜索筛选。
 - 用自然语言调整偏好，例如“多推荐 livehouse，不想看亲子剧”“降低话剧优先级，增加艺人五月天”。
 - 查看采集运行记录，必要时手动触发一次采集。
+
+## Screenshots
+
+| 当日摘要 | 全部演出 | 偏好管理 | 设置 |
+|---|---|---|---|
+| ![今日雷达](docs/screenshot-today.png) | ![全部演出](docs/screenshot-all.png) | ![偏好管理](docs/screenshot-prefs.png) | ![设置](docs/screenshot-settings.png) |
 
 ## Current Capabilities
 
